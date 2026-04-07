@@ -6,13 +6,23 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:migrate:prod": "drizzle-kit migrate --config=drizzle.config.prod.ts",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "hono": "^4.6.14"
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.6.14",
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250101.0",
+    "@types/pg": "^8.20.0",
+    "dotenv": "^17.4.1",
+    "drizzle-kit": "^0.31.10",
     "typescript": "^5.7.2",
     "wrangler": "^4.80.0"
   }
