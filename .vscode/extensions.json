@@ -1,0 +1,13 @@
+{
+  "recommendations": [
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint",
+    "bradlc.vscode-tailwindcss",
+    "ms-azuretools.vscode-docker",
+    "editorconfig.editorconfig",
+    "drizzle-team.drizzle-vscode",
+    "cloudflare.vscode-cloudflare-workers",
+    "anthropic.claude-dev"
+  ],
+  "unwantedRecommendations": []
+}

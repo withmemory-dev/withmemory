@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+.turbo/
+.wrangler/
+
+# Generated files
+infra/migrations/
+pnpm-lock.yaml
+
+# Environment
+.env
+.env.local
+.env.*.local
+.dev.vars
+
+# Supabase
+supabase/.temp/
+supabase/.branches/
+
+# Misc
+*.log
