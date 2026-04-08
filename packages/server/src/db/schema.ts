@@ -116,6 +116,10 @@ export const wmMemories = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
     lastRecalledAt: timestamp("last_recalled_at", { withTimezone: true }),
     supersededBy: uuid("superseded_by"),
   },

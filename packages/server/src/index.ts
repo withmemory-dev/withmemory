@@ -1,12 +1,13 @@
 import { Hono } from "hono";
 import { createDb } from "./db/client";
 import { sql } from "drizzle-orm";
+import type { AppVariables } from "./types";
 
 type Env = {
   DATABASE_URL: string;
 };
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
 app.get("/", (c) => {
   return c.json({
