@@ -55,9 +55,18 @@ export function authMiddleware(db: Db) {
     c.set("account", account);
     c.set("apiKey", apiKey);
 
-    // TODO: Update apiKey.lastUsedAt — this is a write on every authenticated
-    // request, so we'll want to do it efficiently (async fire-and-forget or
-    // throttled to at most once per minute per key). Deferring to a later prompt.
+    // Fire-and-forget last_used_at update — the race between concurrent
+    // requests doesn't matter for this field, so no throttling needed.
+    // waitUntil keeps the Worker alive until the write completes without
+    // blocking the response.
+    c.executionCtx.waitUntil(
+      db
+        .update(wmApiKeys)
+        .set({ lastUsedAt: new Date() })
+        .where(eq(wmApiKeys.id, apiKey.id))
+        .then(() => {})
+        .catch(() => {})
+    );
 
     await next();
   };
