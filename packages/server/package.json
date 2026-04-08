@@ -11,7 +11,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:prod": "drizzle-kit migrate --config=drizzle.config.prod.ts",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:migrate:all": "pnpm db:migrate && pnpm db:migrate:prod"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.7.6",
