@@ -8,6 +8,13 @@
       "when": 1775564964038,
       "tag": "0000_pink_red_wolf",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1775607285660,
+      "tag": "0001_funny_joystick",
+      "breakpoints": true
     }
   ]
 }
