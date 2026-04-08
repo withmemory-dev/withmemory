@@ -1,0 +1,65 @@
+import { Hono } from "hono";
+import { z } from "zod";
+import { zValidator } from "@hono/zod-validator";
+import { eq, and } from "drizzle-orm";
+import * as schema from "../../db/schema";
+import type { AppVariables } from "../../types";
+
+const { wmEndUsers, wmMemories } = schema;
+
+type Env = { DATABASE_URL: string };
+
+const RemoveRequestSchema = z.object({
+  userId: z.string().min(1).max(256),
+  key: z.string().min(1).max(128),
+});
+
+const validator = zValidator("json", RemoveRequestSchema, (result, c) => {
+  if (!result.success) {
+    return c.json(
+      {
+        error: {
+          code: "invalid_request",
+          message: "Invalid request body",
+          details: result.error.issues,
+        },
+      },
+      400
+    );
+  }
+});
+
+export function removeRoute() {
+  const app = new Hono<{ Bindings: Env; Variables: AppVariables }>();
+
+  app.post("/remove", validator, async (c) => {
+    const db = c.get("db");
+    const account = c.get("account");
+    const { userId, key } = c.req.valid("json");
+
+    const [endUser] = await db
+      .select()
+      .from(wmEndUsers)
+      .where(and(eq(wmEndUsers.accountId, account.id), eq(wmEndUsers.externalId, userId)))
+      .limit(1);
+
+    if (!endUser) {
+      return c.json({ deleted: false });
+    }
+
+    const result = await db
+      .delete(wmMemories)
+      .where(
+        and(
+          eq(wmMemories.accountId, account.id),
+          eq(wmMemories.endUserId, endUser.id),
+          eq(wmMemories.key, key)
+        )
+      )
+      .returning({ id: wmMemories.id });
+
+    return c.json({ deleted: result.length > 0 });
+  });
+
+  return app;
+}

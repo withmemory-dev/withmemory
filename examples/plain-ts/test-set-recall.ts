@@ -180,6 +180,95 @@ tests.push({
   },
 });
 
+// ── /v1/get tests ─────────────────────────────────────────────────────────────
+
+tests.push({
+  name: "Get existing memory by key",
+  fn: async () => {
+    const res = await apiCall("/v1/get", { userId, key: "name" });
+    assert(res.status === 200, `expected 200, got ${res.status}`);
+    assert(res.body.memory !== null, "expected memory to be non-null");
+    assert(res.body.memory.key === "name", `expected key "name", got "${res.body.memory.key}"`);
+    assert(
+      res.body.memory.value === "Andrew Gierke",
+      `expected value "Andrew Gierke", got "${res.body.memory.value}"`
+    );
+  },
+});
+
+tests.push({
+  name: "Get nonexistent key returns null memory",
+  fn: async () => {
+    const res = await apiCall("/v1/get", { userId, key: "nonexistent_key" });
+    assert(res.status === 200, `expected 200, got ${res.status}`);
+    assert(res.body.memory === null, `expected null memory, got ${JSON.stringify(res.body.memory)}`);
+  },
+});
+
+tests.push({
+  name: "Get for nonexistent user returns null memory",
+  fn: async () => {
+    const res = await apiCall("/v1/get", { userId: "no_such_user_ever", key: "name" });
+    assert(res.status === 200, `expected 200, got ${res.status}`);
+    assert(res.body.memory === null, `expected null memory`);
+  },
+});
+
+// ── /v1/remove tests ──────────────────────────────────────────────────────────
+
+tests.push({
+  name: "Remove existing memory returns deleted: true",
+  fn: async () => {
+    // Set a throwaway memory to remove
+    await apiCall("/v1/set", { userId, key: "to_delete", value: "temporary" });
+    const res = await apiCall("/v1/remove", { userId, key: "to_delete" });
+    assert(res.status === 200, `expected 200, got ${res.status}`);
+    assert(res.body.deleted === true, `expected deleted: true, got ${res.body.deleted}`);
+    // Verify it's gone
+    const check = await apiCall("/v1/get", { userId, key: "to_delete" });
+    assert(check.body.memory === null, "expected memory to be gone after remove");
+  },
+});
+
+tests.push({
+  name: "Remove nonexistent key returns deleted: false",
+  fn: async () => {
+    const res = await apiCall("/v1/remove", { userId, key: "never_existed" });
+    assert(res.status === 200, `expected 200, got ${res.status}`);
+    assert(res.body.deleted === false, `expected deleted: false, got ${res.body.deleted}`);
+  },
+});
+
+// ── /v1/health test ───────────────────────────────────────────────────────────
+
+tests.push({
+  name: "Authenticated /v1/health returns ok",
+  fn: async () => {
+    const response = await fetch(`${BASE_URL}/v1/health`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${API_KEY}` },
+    });
+    assert(response.status === 200, `expected 200, got ${response.status}`);
+    const body = await response.json() as any;
+    assert(body.status === "ok", `expected status "ok", got "${body.status}"`);
+    assert(typeof body.version === "string", `expected version string, got ${typeof body.version}`);
+  },
+});
+
+// ── 404 handler test ──────────────────────────────────────────────────────────
+
+tests.push({
+  name: "Unknown /v1 route returns 404 with error envelope",
+  fn: async () => {
+    const res = await apiCall("/v1/nonexistent", { userId });
+    assert(res.status === 404, `expected 404, got ${res.status}`);
+    assert(
+      res.body.error?.code === "not_found",
+      `expected error.code "not_found", got "${res.body.error?.code}"`
+    );
+  },
+});
+
 async function main() {
   const totalStart = performance.now();
   let passed = 0;

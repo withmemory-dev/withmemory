@@ -1,14 +1,20 @@
 import { Hono } from "hono";
 import type { AppVariables } from "../../types";
 import { setRoute } from "./set";
+import { getRoute } from "./get";
 import { recallRoute } from "./recall";
+import { removeRoute } from "./remove";
+import { healthRoute } from "./health";
 
 type Env = { DATABASE_URL: string };
 
 export function v1Routes() {
   const app = new Hono<{ Bindings: Env; Variables: AppVariables }>();
   app.route("/", setRoute());
+  app.route("/", getRoute());
   app.route("/", recallRoute());
+  app.route("/", removeRoute());
+  app.route("/", healthRoute());
 
   // Catch-all for unknown /v1/* routes — returns the standard error envelope
   // so the SDK always gets a parseable { error: { code, message } } response.
