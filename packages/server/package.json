@@ -12,7 +12,8 @@
     "db:migrate:prod": "drizzle-kit migrate --config=drizzle.config.prod.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:migrate:all": "pnpm db:migrate && pnpm db:migrate:prod"
+    "db:migrate:all": "pnpm db:migrate && pnpm db:migrate:prod",
+    "db:create-test-key": "tsx scripts/create-test-key.ts"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.7.6",
@@ -26,6 +27,7 @@
     "@types/pg": "^8.20.0",
     "dotenv": "^17.4.1",
     "drizzle-kit": "^0.31.10",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.2",
     "wrangler": "^4.80.0"
   }
