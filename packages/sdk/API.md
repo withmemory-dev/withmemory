@@ -109,6 +109,8 @@ interface HealthResponse {
 }
 ```
 
+`GET /v1/health` is authenticated — it sits behind the same Bearer token middleware as all other `/v1/*` routes. This means `health()` validates both service availability and API key validity. Unauthenticated health checks are available at `/health` and `/health/db` on the root app.
+
 ## SDK methods
 
 | Method                              | HTTP                          | Returns              | Throws on error? |
