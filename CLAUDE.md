@@ -135,28 +135,32 @@ pnpm db:studio                                  # Launch Drizzle Studio (local w
 
 **Drizzle's custom vector type uses 512 dimensions, not 1536** — we use Matryoshka truncation of OpenAI's `text-embedding-3-small` to cut storage in half while retaining ~97% of quality. Do not change this without considering the storage implications.
 
-## Current state (April 2026)
+## Current state (April 2026, end of Session 2)
 
-The infrastructure is complete. The product code is not yet started.
+The server API and TypeScript SDK are functional. The extraction pipeline is not yet built.
 
 What exists:
 - Monorepo structure with pnpm workspaces
-- `packages/server` with Hono, Drizzle, and three health routes (`/`, `/health`, `/health/db`)
+- `packages/server` with Hono, Drizzle, API key auth middleware, and five live `/v1/*` routes (`set`, `get`, `recall`, `remove`, `health`) plus three that return 404 until Session 3 (`commit`, `memories`, `memories/:id`). A catch-all 404 handler on the v1 sub-app returns the standard `{ error: { code, message } }` envelope for unknown routes.
+- `packages/sdk` (`@withmemory/sdk`) — TypeScript SDK with dual ESM/CJS output via tsup, zero runtime dependencies. Exports a `memory` singleton and a `createClient()` factory. All 10 methods implemented as fetch wrappers against the server API. See `packages/sdk/API.md` for the canonical contract.
 - Database schema for four tables (`wm_accounts`, `wm_api_keys`, `wm_end_users`, `wm_memories`) applied to both local and production
+- API key authentication middleware (SHA-256 hash, Bearer token, `last_used_at` updated via `ctx.waitUntil`)
+- E2E test suite: 17 tests covering set, get, recall, remove, health, auth, validation, and 404 handling — passing against both local and production
+- `examples/vercel-ai-sdk/` — integration example demonstrating set → recall → LLM call → commit against `api.withmemory.dev`
 - Local development environment via Supabase CLI + Docker
-- Production deployment pipeline via Wrangler
+- Production deployment pipeline via Wrangler (`pnpm worker:deploy`)
 - Secret management via `.env.local` and `.dev.vars`
 - Git repository at `github.com/withmemory-dev/withmemory` (private)
 
 What does not yet exist:
-- Any product routes (`/v1/set`, `/v1/recall`, `/v1/commit`, etc.)
-- API key generation and authentication middleware
-- The extraction pipeline
-- Embedding generation
-- The SDK package (`packages/sdk` is empty)
+- `POST /v1/commit` server route (extraction pipeline — Session 3)
+- `POST /v1/memories` and `DELETE /v1/memories/:id` server routes (Session 3)
+- The LLM extraction pipeline
+- Embedding generation and vector similarity search
+- Deduplication and conflict resolution
 - The dashboard (`apps/dashboard` is empty)
 - Documentation site
-- Tests
+- Billing integration
 - CI/CD
 
 ## How to contribute effectively

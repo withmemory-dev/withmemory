@@ -160,16 +160,20 @@ See `packages/server/src/db/schema.ts` for the full definitions.
 - **Marketing site (planned):** `https://withmemory.dev`
 - **Documentation (planned):** `https://withmemory.dev/docs` or subdomain
 
+## What exists (end of Session 2)
+
+- **Server routes:** `POST /v1/set`, `/v1/get`, `/v1/recall`, `/v1/remove` and `GET /v1/health` are live on `api.withmemory.dev`. Three routes (`/v1/commit`, `/v1/memories`, `/v1/memories/:id`) return 404 until Session 3. All `/v1/*` routes require Bearer token auth.
+- **SDK:** `@withmemory/sdk` at `packages/sdk/` — TypeScript client with dual ESM/CJS output, zero runtime dependencies. See `packages/sdk/API.md` for the full contract.
+- **Auth:** API key middleware with SHA-256 hash lookup and `last_used_at` fire-and-forget updates via `ctx.waitUntil`.
+- **E2E tests:** 17 tests passing against both local and production.
+- **Example:** `examples/vercel-ai-sdk/` demonstrates the SDK integration pattern with the Vercel AI SDK.
+
 ## What is NOT yet built
 
-This is a pre-alpha state. Everything below is planned but not yet implemented:
-
-- `/v1/set`, `/v1/recall`, `/v1/get`, `/v1/remove`, `/v1/commit` routes
-- API key authentication middleware
-- The LLM extraction pipeline
+- `POST /v1/commit` and the LLM extraction pipeline (Session 3)
+- `POST /v1/memories` and `DELETE /v1/memories/:id` (Session 3)
 - Embedding generation and vector similarity search
 - Deduplication and conflict resolution
-- The `@withmemory/sdk` package (client library)
 - The dashboard at `app.withmemory.dev`
 - Billing integration
 - Open-source publication (repo goes public when server + SDK are ready)
