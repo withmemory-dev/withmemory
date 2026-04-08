@@ -2,12 +2,23 @@ import { Hono } from "hono";
 import { createDb } from "./db/client";
 import { sql } from "drizzle-orm";
 import type { AppVariables } from "./types";
+import { authMiddleware } from "./middleware/auth";
+import { v1Routes } from "./routes/v1";
 
 type Env = {
   DATABASE_URL: string;
 };
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>();
+
+// /v1/* middleware: create db per-request from Worker bindings, then run auth
+app.use("/v1/*", async (c, next) => {
+  const db = createDb(c.env.DATABASE_URL);
+  c.set("db", db);
+  return authMiddleware(db)(c, next);
+});
+
+app.route("/v1", v1Routes());
 
 app.get("/", (c) => {
   return c.json({
