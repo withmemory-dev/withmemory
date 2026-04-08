@@ -126,6 +126,8 @@ interface HealthResponse {
 | `deleteMemory(memoryId)`           | `DELETE /v1/memories/:id`     | `RemoveResponse`     | Yes               |
 | `health()`                         | `GET /v1/health`              | `HealthResponse`     | Yes               |
 
+**`register(defaults)`** stores defaults on the client instance but does not yet affect `recall()` output. Server-side defaults handling lands in Session 3. The method signature is stable; calling it today is a no-op that will become live behavior without requiring code changes.
+
 **`commit()` is fire-and-forget.** It catches all errors internally and never throws. A 404 today (route not yet built) silently no-ops. This is the one exception to the error contract.
 
 **`getUserMemories()` and `deleteMemory()`** routes are not yet built on the server. They will return `not_found` (404) until Session 3 adds the server-side handlers. The SDK methods are fully implemented fetch wrappers — no client-side stubs or special-casing.
