@@ -13,6 +13,10 @@
     "dev": "pnpm -r --parallel dev",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test:e2e": "tsx examples/plain-ts/test-set-recall.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0"
   }
 }
