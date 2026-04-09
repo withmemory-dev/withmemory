@@ -41,12 +41,13 @@ export class WithMemoryClient {
   }
 
   async recall(options: RecallOptions): Promise<RecallResponse> {
-    const hasDefaults = Object.keys(this.registeredDefaults).length > 0;
-    const body = hasDefaults
-      ? { ...options, defaults: { ...this.registeredDefaults, ...options.defaults } }
-      : options.defaults
-        ? options
-        : options;
+    const mergedDefaults = {
+      ...this.registeredDefaults,
+      ...(options.defaults ?? {}),
+    };
+    const body = Object.keys(mergedDefaults).length > 0
+      ? { ...options, defaults: mergedDefaults }
+      : options;
     return this.request<RecallResponse>("POST", "/v1/recall", body);
   }
 
