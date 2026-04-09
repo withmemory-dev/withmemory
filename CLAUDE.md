@@ -180,7 +180,7 @@ What exists:
 - `WorkerEnv` type centralized in `packages/server/src/types.ts` — all env vars declared once
 - `ensureEndUser()` helper shared across `set.ts` and `commit.ts`
 - API key authentication middleware (SHA-256 hash, Bearer token, `last_used_at` updated via `ctx.waitUntil`)
-- E2E test suite: 27 tests covering all eight routes plus auth, validation, idempotency, and defaults — passing against local
+- E2E test suite: 28 tests covering all eight routes plus auth, validation, idempotency, defaults, and cross-account ownership — passing against both local and production
 - `packages/eval/` — extraction eval harness with 12 labeled fixtures and quality scoring
 - `examples/vercel-ai-sdk/` — integration example demonstrating set → recall → LLM call → commit against `api.withmemory.dev`
 - Local development environment via Supabase CLI + Docker
@@ -189,7 +189,6 @@ What exists:
 - Git repository at `github.com/withmemory-dev/withmemory` (private)
 
 What does not yet exist:
-- Production deployment of Session 3 changes (migration + env vars + deploy pending)
 - Semantic ranking in recall (Session 4 — currently naive `updated_at DESC`)
 - Deduplication and conflict resolution (Session 4)
 - Real tokenizer for the trim loop (Session 4)
@@ -231,7 +230,7 @@ This repo is built as if fully open — every file should be appropriate for a p
 
 **Never commit secrets.** No API keys, passwords, or tokens in code, comments, commit messages, or test fixtures. Real values go in `.env.local`, `.dev.vars`, or `wrangler secret put`.
 
-**Never commit the extraction prompt text.** The prompt lives in `EXTRACTION_PROMPT` env var. The repo documents the philosophy and iteration process in `packages/server/docs/extraction-prompt.md`, not the prompt itself.
+**The extraction prompt is committed to the repo.** The prompt lives at `packages/server/src/lib/extraction-prompt.txt` and is imported at build time as a text module. The `EXTRACTION_PROMPT_VERSION` env var (set via `wrangler secret put`) stamps each extraction with the version of the prompt that produced it, which is written to `wm_exchanges.prompt_version` for every commit. Iterating the prompt means editing the `.txt` file, bumping `EXTRACTION_PROMPT_VERSION` in both `.dev.vars` and the production secret, and committing + deploying. The philosophy and iteration guide live in `packages/server/docs/extraction-prompt.md`.
 
 When in doubt, leave it out. If something would be surprising or inappropriate in a public clone, it doesn't belong.
 
