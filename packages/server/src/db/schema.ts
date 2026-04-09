@@ -95,6 +95,53 @@ export const wmEndUsers = pgTable(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// wm_exchanges — conversation turns submitted via commit()
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const wmExchanges = pgTable(
+  "wm_exchanges",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => wmAccounts.id, { onDelete: "cascade" }),
+    endUserId: uuid("end_user_id")
+      .notNull()
+      .references(() => wmEndUsers.id, { onDelete: "cascade" }),
+    input: text("input").notNull(),
+    output: text("output").notNull(),
+    idempotencyKey: text("idempotency_key"),
+    promptVersion: text("prompt_version"),
+    extractionStatus: text("extraction_status", {
+      enum: ["pending", "completed", "failed", "skipped"],
+    })
+      .notNull()
+      .default("pending"),
+    extractionError: text("extraction_error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    extractionCompletedAt: timestamp("extraction_completed_at", {
+      withTimezone: true,
+    }),
+  },
+  (table) => ({
+    // Listing and debugging: exchanges for a user, newest first
+    accountUserCreatedIdx: index("wm_exchanges_account_user_created_idx").on(
+      table.accountId,
+      table.endUserId,
+      table.createdAt
+    ),
+    // Future reconciliation jobs (Session 5+)
+    extractionStatusIdx: index("wm_exchanges_extraction_status_idx").on(
+      table.extractionStatus
+    ),
+    // Partial unique index on (account_id, idempotency_key) WHERE idempotency_key IS NOT NULL
+    // — Drizzle cannot declare partial indexes, so this is added manually in the migration SQL
+  })
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // wm_memories — the memories themselves (explicit + extracted)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -108,11 +155,17 @@ export const wmMemories = pgTable(
     endUserId: uuid("end_user_id")
       .notNull()
       .references(() => wmEndUsers.id, { onDelete: "cascade" }),
+    // NULL key is intentional for extracted memories (source: "extracted").
+    // The unique constraint on (account_id, end_user_id, key) treats NULLs as
+    // distinct per SQL semantics, so multiple extracted memories per user are allowed.
     key: text("key"),
     content: text("content").notNull(),
     source: text("source", { enum: ["explicit", "extracted"] }).notNull(),
     importance: real("importance").notNull().default(0.5),
     embedding: vector("embedding", { dimensions: 512 }),
+    exchangeId: uuid("exchange_id").references(() => wmExchanges.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -135,6 +188,8 @@ export const wmMemories = pgTable(
       table.accountId,
       table.endUserId
     ),
+    // Reverse lookup: which memories came from a given exchange
+    exchangeIdIdx: index("wm_memories_exchange_id_idx").on(table.exchangeId),
     // pgvector HNSW index for similarity search — created via raw SQL in migration
     // because Drizzle doesn't generate HNSW index syntax automatically
   })
@@ -152,6 +207,9 @@ export type NewWmApiKey = typeof wmApiKeys.$inferInsert;
 
 export type WmEndUser = typeof wmEndUsers.$inferSelect;
 export type NewWmEndUser = typeof wmEndUsers.$inferInsert;
+
+export type WmExchange = typeof wmExchanges.$inferSelect;
+export type NewWmExchange = typeof wmExchanges.$inferInsert;
 
 export type WmMemory = typeof wmMemories.$inferSelect;
 export type NewWmMemory = typeof wmMemories.$inferInsert;
