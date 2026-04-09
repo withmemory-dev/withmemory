@@ -269,6 +269,179 @@ tests.push({
   },
 });
 
+// ── /v1/commit tests ─────────────────────────────────────────────────────────
+
+tests.push({
+  name: "Commit returns 202 Accepted",
+  fn: async () => {
+    const res = await apiCall("/v1/commit", {
+      userId,
+      input: "My name is Andrew and I work at Acme Corp.",
+      output: "Nice to meet you, Andrew!",
+    });
+    assert(res.status === 202, `expected 202, got ${res.status}`);
+  },
+});
+
+tests.push({
+  name: "Commit with Idempotency-Key is idempotent",
+  fn: async () => {
+    const idemKey = `e2e_idem_${Date.now()}`;
+    const body = {
+      userId,
+      input: "I prefer dark mode.",
+      output: "Noted!",
+    };
+    const res1 = await fetch(`${BASE_URL}/v1/commit`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${API_KEY}`,
+        "Idempotency-Key": idemKey,
+      },
+      body: JSON.stringify(body),
+    });
+    assert(res1.status === 202, `first call: expected 202, got ${res1.status}`);
+
+    const res2 = await fetch(`${BASE_URL}/v1/commit`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${API_KEY}`,
+        "Idempotency-Key": idemKey,
+      },
+      body: JSON.stringify(body),
+    });
+    assert(res2.status === 202, `second call: expected 202, got ${res2.status}`);
+  },
+});
+
+tests.push({
+  name: "Commit rejects oversized payload",
+  fn: async () => {
+    const res = await apiCall("/v1/commit", {
+      userId,
+      input: "x".repeat(20000),
+      output: "y",
+    });
+    assert(res.status === 400, `expected 400, got ${res.status}`);
+    assert(
+      res.body.error?.code === "invalid_request",
+      `expected error.code "invalid_request", got "${res.body.error?.code}"`
+    );
+    assert(
+      res.body.error?.message === "Commit exceeds maximum size",
+      `expected size error message`
+    );
+  },
+});
+
+tests.push({
+  name: "Commit validation failure returns 400",
+  fn: async () => {
+    const res = await apiCall("/v1/commit", { userId });
+    assert(res.status === 400, `expected 400, got ${res.status}`);
+    assert(
+      res.body.error?.code === "invalid_request",
+      `expected error.code "invalid_request"`
+    );
+  },
+});
+
+// ── /v1/memories tests ───────────────────────────────────────────────────────
+
+tests.push({
+  name: "List memories for user with memories",
+  fn: async () => {
+    const res = await apiCall("/v1/memories", { userId });
+    assert(res.status === 200, `expected 200, got ${res.status}`);
+    assert(Array.isArray(res.body.memories), "expected memories array");
+    // User should have at least the 3 memories from set tests (name, role, subscription)
+    assert(res.body.memories.length >= 3, `expected >= 3 memories, got ${res.body.memories.length}`);
+    // Verify Memory shape
+    const first = res.body.memories[0];
+    assert(typeof first.id === "string", "expected id string");
+    assert(typeof first.value === "string", "expected value string");
+    assert(typeof first.source === "string", "expected source string");
+  },
+});
+
+tests.push({
+  name: "List memories for nonexistent user returns empty",
+  fn: async () => {
+    const res = await apiCall("/v1/memories", { userId: "no_such_user_ever_memories" });
+    assert(res.status === 200, `expected 200, got ${res.status}`);
+    assert(res.body.memories.length === 0, `expected 0 memories`);
+  },
+});
+
+// ── DELETE /v1/memories/:id tests ────────────────────────────────────────────
+
+tests.push({
+  name: "Delete memory by ID returns deleted: true",
+  fn: async () => {
+    // Set a throwaway memory, then delete by ID
+    const setRes = await apiCall("/v1/set", { userId, key: "to_delete_by_id", value: "temp" });
+    assert(setRes.status === 200, `set: expected 200, got ${setRes.status}`);
+    const memId = setRes.body.memory.id;
+
+    const delRes = await fetch(`${BASE_URL}/v1/memories/${memId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${API_KEY}` },
+    });
+    assert(delRes.status === 200, `delete: expected 200, got ${delRes.status}`);
+    const delBody = await delRes.json() as any;
+    assert(delBody.deleted === true, `expected deleted: true`);
+
+    // Verify it's gone via get
+    const getRes = await apiCall("/v1/get", { userId, key: "to_delete_by_id" });
+    assert(getRes.body.memory === null, "expected memory to be gone after delete");
+  },
+});
+
+tests.push({
+  name: "Delete nonexistent memory returns deleted: false",
+  fn: async () => {
+    const delRes = await fetch(`${BASE_URL}/v1/memories/00000000-0000-0000-0000-000000000000`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${API_KEY}` },
+    });
+    assert(delRes.status === 200, `expected 200, got ${delRes.status}`);
+    const delBody = await delRes.json() as any;
+    assert(delBody.deleted === false, `expected deleted: false`);
+  },
+});
+
+tests.push({
+  name: "Delete with invalid UUID returns 400",
+  fn: async () => {
+    const delRes = await fetch(`${BASE_URL}/v1/memories/not-a-uuid`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${API_KEY}` },
+    });
+    assert(delRes.status === 400, `expected 400, got ${delRes.status}`);
+    const delBody = await delRes.json() as any;
+    assert(delBody.error?.code === "invalid_request", `expected invalid_request`);
+  },
+});
+
+// ── /v1/recall defaults tests ────────────────────────────────────────────────
+
+tests.push({
+  name: "Recall with defaults for nonexistent user returns defaults in promptBlock",
+  fn: async () => {
+    const res = await apiCall("/v1/recall", {
+      userId: "recall_defaults_test_user",
+      input: "hello",
+      defaults: { plan: "pro", tier: "beta" },
+    });
+    assert(res.status === 200, `expected 200, got ${res.status}`);
+    assert(res.body.promptBlock.includes("plan: pro"), `expected "plan: pro" in promptBlock`);
+    assert(res.body.promptBlock.includes("tier: beta"), `expected "tier: beta" in promptBlock`);
+    assert(res.body.memories.length === 0, `expected 0 memories (defaults are not real memories)`);
+  },
+});
+
 async function main() {
   const totalStart = performance.now();
   let passed = 0;
