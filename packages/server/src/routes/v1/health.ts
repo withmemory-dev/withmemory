@@ -1,10 +1,8 @@
 import { Hono } from "hono";
-import type { AppVariables } from "../../types";
-
-type Env = { DATABASE_URL: string };
+import type { WorkerEnv, AppVariables } from "../../types";
 
 export function healthRoute() {
-  const app = new Hono<{ Bindings: Env; Variables: AppVariables }>();
+  const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
   app.get("/health", (c) => {
     return c.json({ status: "ok" as const, version: "0.0.0" });

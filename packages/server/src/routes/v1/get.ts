@@ -3,11 +3,9 @@ import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { eq, and } from "drizzle-orm";
 import * as schema from "../../db/schema";
-import type { AppVariables } from "../../types";
+import type { WorkerEnv, AppVariables } from "../../types";
 
 const { wmEndUsers, wmMemories } = schema;
-
-type Env = { DATABASE_URL: string };
 
 const GetRequestSchema = z.object({
   userId: z.string().min(1).max(256),
@@ -30,7 +28,7 @@ const validator = zValidator("json", GetRequestSchema, (result, c) => {
 });
 
 export function getRoute() {
-  const app = new Hono<{ Bindings: Env; Variables: AppVariables }>();
+  const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
   app.post("/get", validator, async (c) => {
     const db = c.get("db");
