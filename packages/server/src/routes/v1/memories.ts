@@ -45,7 +45,7 @@ export function memoriesRoute() {
       .limit(1);
 
     if (!endUser) {
-      return c.json({ memories: [] });
+      return c.json([]);
     }
 
     const rows = await db
@@ -54,8 +54,8 @@ export function memoriesRoute() {
       .where(and(eq(wmMemories.accountId, account.id), eq(wmMemories.endUserId, endUser.id)))
       .orderBy(desc(wmMemories.updatedAt));
 
-    return c.json({
-      memories: rows.map((m) => ({
+    return c.json(
+      rows.map((m) => ({
         id: m.id,
         userId,
         key: m.key,
@@ -63,8 +63,8 @@ export function memoriesRoute() {
         source: m.source as "explicit" | "extracted",
         createdAt: m.createdAt.toISOString(),
         updatedAt: m.updatedAt.toISOString(),
-      })),
-    });
+      }))
+    );
   });
 
   // DELETE /v1/memories/:id — delete a single memory by ID

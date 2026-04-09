@@ -355,11 +355,11 @@ tests.push({
   fn: async () => {
     const res = await apiCall("/v1/memories", { userId });
     assert(res.status === 200, `expected 200, got ${res.status}`);
-    assert(Array.isArray(res.body.memories), "expected memories array");
+    assert(Array.isArray(res.body), "expected bare array response");
     // User should have at least the 3 memories from set tests (name, role, subscription)
-    assert(res.body.memories.length >= 3, `expected >= 3 memories, got ${res.body.memories.length}`);
+    assert(res.body.length >= 3, `expected >= 3 memories, got ${res.body.length}`);
     // Verify Memory shape
-    const first = res.body.memories[0];
+    const first = res.body[0];
     assert(typeof first.id === "string", "expected id string");
     assert(typeof first.value === "string", "expected value string");
     assert(typeof first.source === "string", "expected source string");
@@ -371,7 +371,8 @@ tests.push({
   fn: async () => {
     const res = await apiCall("/v1/memories", { userId: "no_such_user_ever_memories" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
-    assert(res.body.memories.length === 0, `expected 0 memories`);
+    assert(Array.isArray(res.body), "expected bare array response");
+    assert(res.body.length === 0, `expected 0 memories`);
   },
 });
 

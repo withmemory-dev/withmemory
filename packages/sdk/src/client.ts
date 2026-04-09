@@ -67,8 +67,7 @@ export class WithMemoryClient {
   }
 
   async getUserMemories(userId: string): Promise<Memory[]> {
-    const result = await this.request<{ memories: Memory[] }>("POST", "/v1/memories", { userId });
-    return result.memories;
+    return this.request<Memory[]>("POST", "/v1/memories", { userId });
   }
 
   async deleteMemory(memoryId: string): Promise<RemoveResponse> {
