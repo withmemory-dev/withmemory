@@ -7,6 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 [[rules]]
 type = "Text"
 globs = ["**/*.txt"]
+fallthrough = false
 
 # Custom domain will be added separately after first deploy
 # routes = [
