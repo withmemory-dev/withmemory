@@ -17,16 +17,17 @@ The harness runs the extraction library (`runExtraction` from `@withmemory/serve
 
 ```bash
 OPENAI_API_KEY=sk-... \
-EXTRACTION_PROMPT="..." \
 EXTRACTION_PROMPT_VERSION=0.1.0 \
 pnpm --filter @withmemory/eval eval
 ```
 
-Requires a real OpenAI API key and the extraction prompt text.
+Requires a real OpenAI API key. The extraction prompt itself is read from `packages/server/src/lib/extraction-prompt.txt` at startup — no need to pass it as an env var.
+
+`EXTRACTION_PROMPT_VERSION` is optional and defaults to `"eval"` if not set, but passing the real version (e.g. `0.1.0`) makes the eval output directly comparable to production runs and makes metrics tables easier to read.
 
 ## Fixture format
 
-Fixtures live in `fixtures/v1.jsonl` — one JSON object per line. The dataset will be expanded to 50+ hand-curated examples for real prompt iteration.
+Fixtures live in `fixtures/v1.jsonl` — one JSON object per line. The dataset contains 50 hand-curated examples across four categories (15 negative, 15 positive, 15 ambiguous, 5 adversarial). v0.1.0 of the extraction prompt was measured against this dataset with the results captured in docs/sessions/session-5-kickoff.md.
 
 Each fixture has this schema:
 
