@@ -107,9 +107,12 @@ packages/server/
 ├── .env.local                # GITIGNORED, developer-specific
 └── .dev.vars                 # GITIGNORED, Wrangler local secrets
 packages/eval/
+├── fixtures/
+│   └── v1.jsonl              # Labeled extraction test cases (JSONL, four-category)
 ├── src/
-│   ├── fixtures.ts           # Labeled extraction test cases
+│   ├── types.ts              # Fixture and FixtureCategory types
 │   └── run.ts                # Eval harness runner
+├── README.md                 # How to run and add fixtures
 ├── package.json
 └── tsconfig.json
 infra/
