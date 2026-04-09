@@ -12,6 +12,7 @@ const RecallRequestSchema = z.object({
   input: z.string().min(1).max(8192),
   maxItems: z.number().int().min(1).max(50).optional(),
   maxTokens: z.number().int().min(10).max(2000).optional(),
+  defaults: z.record(z.string(), z.string()).optional(),
 });
 
 const validator = zValidator("json", RecallRequestSchema, (result, c) => {
@@ -35,7 +36,7 @@ export function recallRoute() {
   app.post("/recall", validator, async (c) => {
     const db = c.get("db");
     const account = c.get("account");
-    const { userId, maxItems, maxTokens } = c.req.valid("json");
+    const { userId, maxItems, maxTokens, defaults } = c.req.valid("json");
 
     // Look up end user — if they don't exist, they have no memories
     const [endUser] = await db
@@ -45,6 +46,21 @@ export function recallRoute() {
       .limit(1);
 
     if (!endUser) {
+      // No user yet — if defaults exist, build a prompt block from them
+      if (defaults && Object.keys(defaults).length > 0) {
+        const resolvedMaxTokens = maxTokens ?? 150;
+        const maxChars = resolvedMaxTokens * 4;
+        const resolvedMaxItems = maxItems ?? 4;
+
+        const defaultLines: string[] = [];
+        for (const [k, v] of Object.entries(defaults)) {
+          if (defaultLines.length >= resolvedMaxItems) break;
+          const line = `${k}: ${v}`;
+          if ([...defaultLines, line].join("\n").length > maxChars) break;
+          defaultLines.push(line);
+        }
+        return c.json({ promptBlock: defaultLines.join("\n"), memories: [] });
+      }
       return c.json({ promptBlock: "", memories: [] });
     }
 
@@ -71,8 +87,19 @@ export function recallRoute() {
       keptRows.pop();
     }
 
+    // Tier 4: append registered defaults if there's headroom
+    if (defaults && Object.keys(defaults).length > 0 && kept.length < resolvedMaxItems) {
+      for (const [k, v] of Object.entries(defaults)) {
+        if (kept.length >= resolvedMaxItems) break;
+        const line = `${k}: ${v}`;
+        if ([...kept, line].join("\n").length > maxChars) break;
+        kept.push(line);
+      }
+    }
+
     const promptBlock = kept.join("\n");
 
+    // memories array reflects real DB rows only — defaults are prompt-block-only
     return c.json({
       promptBlock,
       memories: keptRows.map((m) => ({

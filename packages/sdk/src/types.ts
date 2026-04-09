@@ -41,6 +41,7 @@ export interface RecallOptions {
   input: string;
   maxItems?: number;
   maxTokens?: number;
+  defaults?: Record<string, string>;
 }
 
 export interface CommitOptions {

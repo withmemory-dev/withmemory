@@ -19,6 +19,7 @@ export class WithMemoryClient {
   private apiKey: string;
   private baseUrl: string;
   private timeout: number;
+  private registeredDefaults: Record<string, string> = {};
 
   constructor(config: WithMemoryConfig) {
     this.apiKey = config.apiKey;
@@ -26,10 +27,9 @@ export class WithMemoryClient {
     this.timeout = config.timeout ?? DEFAULT_TIMEOUT;
   }
 
-  // No-op until Session 3 adds server-side defaults support. The method
-  // signature is stable — it will forward defaults in the recall request
-  // body when the server accepts them.
-  register(_defaults: RegisterDefaults): void {}
+  register(defaults: RegisterDefaults): void {
+    this.registeredDefaults = { ...defaults };
+  }
 
 
   async set(userId: string, key: string, value: string): Promise<SetResponse> {
@@ -41,7 +41,13 @@ export class WithMemoryClient {
   }
 
   async recall(options: RecallOptions): Promise<RecallResponse> {
-    return this.request<RecallResponse>("POST", "/v1/recall", options);
+    const hasDefaults = Object.keys(this.registeredDefaults).length > 0;
+    const body = hasDefaults
+      ? { ...options, defaults: { ...this.registeredDefaults, ...options.defaults } }
+      : options.defaults
+        ? options
+        : options;
+    return this.request<RecallResponse>("POST", "/v1/recall", body);
   }
 
   async remove(userId: string, key: string): Promise<RemoveResponse> {
