@@ -5,5 +5,5 @@
     "rootDir": "src",
     "types": ["node"]
   },
-  "include": ["src"]
+  "include": ["src", "../server/src/lib/text-modules.d.ts"]
 }

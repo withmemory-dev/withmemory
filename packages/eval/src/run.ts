@@ -6,7 +6,7 @@
  * and adversarial.
  *
  * Usage:
- *   OPENAI_API_KEY=sk-... EXTRACTION_PROMPT="..." pnpm --filter @withmemory/eval eval
+ *   OPENAI_API_KEY=sk-... pnpm --filter @withmemory/eval eval
  */
 
 import { readFileSync } from "node:fs";
@@ -18,15 +18,10 @@ import type { Fixture, FixtureCategory } from "./types";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const EXTRACTION_PROMPT = process.env.EXTRACTION_PROMPT;
 const EXTRACTION_PROMPT_VERSION = process.env.EXTRACTION_PROMPT_VERSION ?? "eval";
 
 if (!OPENAI_API_KEY) {
   console.error("ERROR: OPENAI_API_KEY is required.");
-  process.exit(1);
-}
-if (!EXTRACTION_PROMPT) {
-  console.error("ERROR: EXTRACTION_PROMPT is required.");
   process.exit(1);
 }
 
@@ -58,7 +53,6 @@ interface EvalResult {
 async function evaluateFixture(fixture: Fixture): Promise<EvalResult> {
   const result = await runExtraction({
     openaiApiKey: OPENAI_API_KEY!,
-    prompt: EXTRACTION_PROMPT!,
     promptVersion: EXTRACTION_PROMPT_VERSION,
     input: { input: fixture.input, output: fixture.output },
   });
