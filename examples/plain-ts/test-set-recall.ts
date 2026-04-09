@@ -1,5 +1,6 @@
 const BASE_URL = process.env.WITHMEMORY_BASE_URL ?? "http://localhost:8787";
 const API_KEY = process.env.WITHMEMORY_API_KEY;
+const API_KEY_B = process.env.WITHMEMORY_API_KEY_B;
 
 if (!API_KEY) {
   console.error("ERROR: WITHMEMORY_API_KEY is required. Pass it as an environment variable.");
@@ -442,6 +443,54 @@ tests.push({
     assert(res.body.memories.length === 0, `expected 0 memories (defaults are not real memories)`);
   },
 });
+
+// ── Cross-account ownership test (requires WITHMEMORY_API_KEY_B) ─────────────
+
+if (API_KEY_B) {
+  tests.push({
+    name: "Cross-account delete returns deleted: false (ownership boundary)",
+    fn: async () => {
+      // 1. Create a memory under Account A
+      const setRes = await apiCall("/v1/set", { userId, key: "cross_acct_test", value: "secret" });
+      assert(setRes.status === 200, `set: expected 200, got ${setRes.status}`);
+      const memId = setRes.body.memory.id;
+
+      // 2. Attempt to delete it using Account B's key
+      const delRes = await fetch(`${BASE_URL}/v1/memories/${memId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${API_KEY_B}` },
+      });
+      assert(delRes.status === 200, `cross-account delete: expected 200, got ${delRes.status}`);
+      const delBody = await delRes.json() as any;
+      assert(
+        delBody.deleted === false,
+        `expected deleted: false (Account B cannot delete Account A's memory), got ${delBody.deleted}`
+      );
+
+      // 3. Verify the memory still exists via Account A
+      const getRes = await apiCall("/v1/get", { userId, key: "cross_acct_test" });
+      assert(
+        getRes.body.memory !== null,
+        "expected memory to still exist after cross-account delete attempt"
+      );
+      assert(
+        getRes.body.memory.value === "secret",
+        `expected value "secret", got "${getRes.body.memory.value}"`
+      );
+
+      // 4. Clean up: delete with Account A's key
+      const cleanupRes = await fetch(`${BASE_URL}/v1/memories/${memId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${API_KEY}` },
+      });
+      assert(cleanupRes.status === 200, `cleanup delete: expected 200`);
+      const cleanupBody = await cleanupRes.json() as any;
+      assert(cleanupBody.deleted === true, `cleanup: expected deleted: true`);
+    },
+  });
+} else {
+  console.log("⚠ Skipping cross-account ownership test (WITHMEMORY_API_KEY_B not set)");
+}
 
 async function main() {
   const totalStart = performance.now();
