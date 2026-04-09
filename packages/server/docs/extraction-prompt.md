@@ -36,20 +36,25 @@ An empty array `{ "memories": [] }` is the expected outcome for most conversatio
 
 ## Where the prompt lives
 
-The extraction prompt is stored as the `EXTRACTION_PROMPT` environment variable, not as a file in the repository. This keeps prompt iteration decoupled from code deploys.
+The extraction prompt is bundled into the Worker at build time as a text module:
 
-- **Local dev:** Set in `.dev.vars`
-- **Production:** Set via `wrangler secret put EXTRACTION_PROMPT`
+```
+packages/server/src/lib/extraction-prompt.txt
+```
+
+The extraction library imports it directly via `import EXTRACTION_PROMPT from "./extraction-prompt.txt"`. Cloudflare's `[[rules]]` configuration in `wrangler.toml` treats `.txt` files as text modules.
+
+This replaces the earlier approach of storing the prompt in the `EXTRACTION_PROMPT` environment variable. Wrangler's dotenv parser truncates multi-line values at blank lines, making env vars unsuitable for prompts with section breaks.
 
 ## How to iterate
 
-1. Write or edit the prompt text
+1. Edit `packages/server/src/lib/extraction-prompt.txt`
 2. Bump `EXTRACTION_PROMPT_VERSION` (semver, e.g., `0.1.0` -> `0.2.0`)
-3. Set both via `wrangler secret put` (production) or `.dev.vars` (local)
-4. Redeploy the Worker: `pnpm worker:deploy`
+3. Set the version via `wrangler secret put EXTRACTION_PROMPT_VERSION` (production) or `.dev.vars` (local)
+4. Commit the prompt change and deploy: `pnpm worker:deploy`
 5. Run the eval harness against the new version to measure quality
 
-Both `EXTRACTION_PROMPT` and `EXTRACTION_PROMPT_VERSION` are stamped on every `wm_exchanges` row at write time, so the eval harness can compare extraction quality across prompt versions.
+`EXTRACTION_PROMPT_VERSION` is stamped on every `wm_exchanges` row at write time, so the eval harness can compare extraction quality across prompt versions.
 
 ## Version history
 

@@ -95,7 +95,9 @@ packages/server/
 │   └── lib/
 │       ├── hash.ts           # SHA-256 Web Crypto helper
 │       ├── end-users.ts      # ensureEndUser() shared upsert helper
-│       └── extraction.ts     # LLM extraction + embedding via OpenAI
+│       ├── extraction.ts     # LLM extraction + embedding via OpenAI
+│       ├── extraction-prompt.txt  # Bundled extraction prompt (text module)
+│       └── text-modules.d.ts # TypeScript declaration for .txt imports
 ├── docs/
 │   └── extraction-prompt.md  # Extraction prompt philosophy and iteration guide
 ├── drizzle.config.ts         # Local Drizzle Kit config (reads DATABASE_URL)
