@@ -6,6 +6,8 @@
  * persisting results.
  */
 
+import EXTRACTION_PROMPT from "./extraction-prompt.txt";
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface ExtractionInput {
@@ -28,16 +30,15 @@ export interface ExtractionResult {
 
 export async function runExtraction(params: {
   openaiApiKey: string;
-  prompt: string;
   promptVersion: string;
   input: ExtractionInput;
 }): Promise<ExtractionResult> {
-  const { openaiApiKey, prompt, promptVersion, input } = params;
+  const { openaiApiKey, promptVersion, input } = params;
 
   // Step 1: Extract memories via gpt-4.1-mini
   let rawMemories: string[];
   try {
-    rawMemories = await callExtraction(openaiApiKey, prompt, input);
+    rawMemories = await callExtraction(openaiApiKey, EXTRACTION_PROMPT, input);
   } catch (err) {
     return {
       memories: [],

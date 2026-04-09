@@ -95,15 +95,14 @@ export function commitRoute() {
     c.executionCtx.waitUntil(
       (async () => {
         try {
-          const prompt = c.env.EXTRACTION_PROMPT;
           const apiKey = c.env.OPENAI_API_KEY;
 
-          if (!prompt || !apiKey) {
+          if (!apiKey) {
             await db
               .update(wmExchanges)
               .set({
                 extractionStatus: "failed",
-                extractionError: "Missing OPENAI_API_KEY or EXTRACTION_PROMPT",
+                extractionError: "Missing OPENAI_API_KEY",
                 extractionCompletedAt: new Date(),
               })
               .where(eq(wmExchanges.id, exchange.id));
@@ -112,7 +111,6 @@ export function commitRoute() {
 
           const result = await runExtraction({
             openaiApiKey: apiKey,
-            prompt,
             promptVersion: c.env.EXTRACTION_PROMPT_VERSION || "unknown",
             input: { input, output },
           });
