@@ -17,6 +17,11 @@ import type { Fixture, FixtureCategory } from "./types";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+const EXTRACTION_PROMPT = readFileSync(
+  resolve(__dirname, "../../server/src/lib/extraction-prompt.txt"),
+  "utf-8"
+);
+
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const EXTRACTION_PROMPT_VERSION = process.env.EXTRACTION_PROMPT_VERSION ?? "eval";
 
@@ -53,6 +58,7 @@ interface EvalResult {
 async function evaluateFixture(fixture: Fixture): Promise<EvalResult> {
   const result = await runExtraction({
     openaiApiKey: OPENAI_API_KEY!,
+    prompt: EXTRACTION_PROMPT,
     promptVersion: EXTRACTION_PROMPT_VERSION,
     input: { input: fixture.input, output: fixture.output },
   });

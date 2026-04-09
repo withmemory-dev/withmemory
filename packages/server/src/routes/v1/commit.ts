@@ -6,6 +6,7 @@ import * as schema from "../../db/schema";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { ensureEndUser } from "../../lib/end-users";
 import { runExtraction, parseMaxInputBytes } from "../../lib/extraction";
+import EXTRACTION_PROMPT from "../../lib/extraction-prompt.txt";
 
 const { wmExchanges, wmMemories } = schema;
 
@@ -111,6 +112,7 @@ export function commitRoute() {
 
           const result = await runExtraction({
             openaiApiKey: apiKey,
+            prompt: EXTRACTION_PROMPT,
             promptVersion: c.env.EXTRACTION_PROMPT_VERSION || "unknown",
             input: { input, output },
           });
