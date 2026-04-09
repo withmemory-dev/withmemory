@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import { eq, and } from "drizzle-orm";
 import * as schema from "../../db/schema";
 import type { WorkerEnv, AppVariables } from "../../types";
+import { ensureEndUser } from "../../lib/end-users";
 
-const { wmEndUsers, wmMemories } = schema;
+const { wmMemories } = schema;
 
 const SetRequestSchema = z.object({
   userId: z.string().min(1).max(256),
@@ -36,17 +36,7 @@ export function setRoute() {
     const account = c.get("account");
     const { userId, key, value } = c.req.valid("json");
 
-    // Upsert end user: insert if missing, no-op on conflict
-    await db
-      .insert(wmEndUsers)
-      .values({ accountId: account.id, externalId: userId })
-      .onConflictDoNothing({ target: [wmEndUsers.accountId, wmEndUsers.externalId] });
-
-    const [endUser] = await db
-      .select()
-      .from(wmEndUsers)
-      .where(and(eq(wmEndUsers.accountId, account.id), eq(wmEndUsers.externalId, userId)))
-      .limit(1);
+    const endUser = await ensureEndUser(db, account.id, userId);
 
     // Upsert memory: insert or update on (account, end_user, key) conflict
     const [memory] = await db
