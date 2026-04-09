@@ -43,9 +43,9 @@ These codes do not exist yet. They are listed here so nobody adds them premature
 | Code                  | Planned Session | Purpose                                              |
 |-----------------------|-----------------|------------------------------------------------------|
 | `rate_limited`        | Session 5       | Account has exceeded its request quota                |
-| `extraction_failed`   | Session 3       | LLM extraction encountered an unrecoverable error    |
+| `extraction_failed`   | Session 5+      | LLM extraction error surfaced to caller (currently internal-only on the exchange row) |
 | `quota_exceeded`      | Session 5       | Account has exceeded its memory storage quota         |
-| `internal_error`      | Session 3+      | Unclassified server error (5xx)                      |
+| `internal_error`      | Session 4+      | Unclassified server error (5xx)                      |
 
 ## Types
 
@@ -126,8 +126,10 @@ interface HealthResponse {
 | `deleteMemory(memoryId)`           | `DELETE /v1/memories/:id`     | `RemoveResponse`     | Yes               |
 | `health()`                         | `GET /v1/health`              | `HealthResponse`     | Yes               |
 
-**`register(defaults)`** stores defaults on the client instance but does not yet affect `recall()` output. Server-side defaults handling lands in Session 3. The method signature is stable; calling it today is a no-op that will become live behavior without requiring code changes.
+**`register(defaults)`** stores defaults on the client instance. Defaults are forwarded in the `recall()` request body as a `defaults` field and appear in the `promptBlock` as tier 4 fallback (after explicit, extracted, and summary memories). Defaults do NOT appear in the `memories` array — they are prompt-block-only.
 
-**`commit()` is fire-and-forget.** It catches all errors internally and never throws. A 404 today (route not yet built) silently no-ops. This is the one exception to the error contract.
+**`commit()` is fire-and-forget.** It catches all errors internally and never throws. The server returns 202 immediately and runs extraction asynchronously. Supports an `Idempotency-Key` header (max 255 chars) — repeated calls with the same key return 202 without re-processing. This is the one exception to the error contract.
 
-**`getUserMemories()` and `deleteMemory()`** routes are not yet built on the server. They will return `not_found` (404) until Session 3 adds the server-side handlers. The SDK methods are fully implemented fetch wrappers — no client-side stubs or special-casing.
+**`recall()` accepts optional `defaults`** — a `Record<string, string>` of key-value pairs to include in the prompt block when real memories don't fill the budget. Per-call defaults merge with (and override) any defaults set via `register()`. The `memories` array in the response reflects real database rows only.
+
+**`getUserMemories()`** returns all memories for a user, wrapped in `{ memories: Memory[] }`. **`deleteMemory()`** deletes a memory by ID with account-level ownership check.

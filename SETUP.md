@@ -140,7 +140,7 @@ This runs `wrangler deploy`, which bundles the code and ships it to Cloudflare. 
 
 ## Data model
 
-Four tables, all prefixed `wm_`:
+Five tables, all prefixed `wm_`:
 
 **`wm_accounts`** — WithMemory customers (developers). One row per signup.
 
@@ -148,7 +148,9 @@ Four tables, all prefixed `wm_`:
 
 **`wm_end_users`** — The developers' end users. Identified by `external_id`, which is whatever string the developer passes as `userId`. Unique within an account.
 
-**`wm_memories`** — The actual memories. Both explicit (via `set()`) and extracted (via `commit()`) live here, distinguished by a `source` column. Has a `vector(512)` embedding column with an HNSW index for cosine similarity search.
+**`wm_exchanges`** — Conversation turns submitted via `commit()`. Stores input/output pairs, extraction status, and prompt version for eval harness analysis. Supports idempotency via a partial unique index on `(account_id, idempotency_key)`.
+
+**`wm_memories`** — The actual memories. Both explicit (via `set()`) and extracted (via `commit()`) live here, distinguished by a `source` column. Has a `vector(512)` embedding column with an HNSW index for cosine similarity search. Extracted memories link back to their source exchange via `exchange_id`.
 
 See `packages/server/src/db/schema.ts` for the full definitions.
 
@@ -160,20 +162,21 @@ See `packages/server/src/db/schema.ts` for the full definitions.
 - **Marketing site (planned):** `https://withmemory.dev`
 - **Documentation (planned):** `https://withmemory.dev/docs` or subdomain
 
-## What exists (end of Session 2)
+## What exists (end of Session 3)
 
-- **Server routes:** `POST /v1/set`, `/v1/get`, `/v1/recall`, `/v1/remove` and `GET /v1/health` are live on `api.withmemory.dev`. Three routes (`/v1/commit`, `/v1/memories`, `/v1/memories/:id`) return 404 until Session 3. All `/v1/*` routes require Bearer token auth.
-- **SDK:** `@withmemory/sdk` at `packages/sdk/` — TypeScript client with dual ESM/CJS output, zero runtime dependencies. See `packages/sdk/API.md` for the full contract.
+- **Server routes:** All eight `/v1/*` routes are live locally: `POST /v1/set`, `/v1/get`, `/v1/recall`, `/v1/remove`, `/v1/commit`, `/v1/memories`, `DELETE /v1/memories/:id`, and `GET /v1/health`. All require Bearer token auth.
+- **Extraction pipeline:** `POST /v1/commit` accepts conversation turns, returns 202 immediately, and runs async LLM extraction via `waitUntil`. Extraction uses gpt-4.1-mini, embeddings use text-embedding-3-small at 512 dimensions. Supports `Idempotency-Key` header.
+- **SDK:** `@withmemory/sdk` at `packages/sdk/` — all 10 methods are live. `register()` stores defaults and forwards them to `recall()` as tier 4 fallback.
 - **Auth:** API key middleware with SHA-256 hash lookup and `last_used_at` fire-and-forget updates via `ctx.waitUntil`.
-- **E2E tests:** 17 tests passing against both local and production.
+- **E2E tests:** 27 tests passing against local, covering all eight routes plus auth, validation, idempotency, and defaults.
+- **Eval harness:** `packages/eval/` with 12 labeled fixtures for measuring extraction quality against the 70% empty target.
 - **Example:** `examples/vercel-ai-sdk/` demonstrates the SDK integration pattern with the Vercel AI SDK.
 
 ## What is NOT yet built
 
-- `POST /v1/commit` and the LLM extraction pipeline (Session 3)
-- `POST /v1/memories` and `DELETE /v1/memories/:id` (Session 3)
-- Embedding generation and vector similarity search
-- Deduplication and conflict resolution
+- Production deployment of Session 3 changes (migration + env vars + deploy)
+- Semantic ranking in recall (Session 4 — currently naive `updated_at DESC`)
+- Deduplication and conflict resolution (Session 4)
 - The dashboard at `app.withmemory.dev`
 - Billing integration
 - Open-source publication (repo goes public when server + SDK are ready)

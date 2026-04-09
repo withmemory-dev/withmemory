@@ -77,12 +77,27 @@ These are rules that should not be changed without an explicit architectural dis
 packages/server/
 ├── src/
 │   ├── index.ts              # Hono app entry, route registration
+│   ├── types.ts              # WorkerEnv and AppVariables types
 │   ├── db/
 │   │   ├── schema.ts         # SOURCE OF TRUTH for the database schema
 │   │   └── client.ts         # createDb() factory, runtime-agnostic
-│   ├── routes/               # (not yet created) Route handlers by resource
-│   ├── middleware/           # (not yet created) Auth, logging, rate limiting
-│   └── lib/                  # (not yet created) Shared utilities
+│   ├── routes/v1/
+│   │   ├── index.ts          # v1 route aggregator + catch-all 404
+│   │   ├── set.ts            # POST /v1/set
+│   │   ├── get.ts            # POST /v1/get
+│   │   ├── recall.ts         # POST /v1/recall (with defaults support)
+│   │   ├── remove.ts         # POST /v1/remove
+│   │   ├── commit.ts         # POST /v1/commit (extraction pipeline)
+│   │   ├── memories.ts       # POST /v1/memories + DELETE /v1/memories/:id
+│   │   └── health.ts         # GET /v1/health
+│   ├── middleware/
+│   │   └── auth.ts           # API key auth (SHA-256, Bearer token)
+│   └── lib/
+│       ├── hash.ts           # SHA-256 Web Crypto helper
+│       ├── end-users.ts      # ensureEndUser() shared upsert helper
+│       └── extraction.ts     # LLM extraction + embedding via OpenAI
+├── docs/
+│   └── extraction-prompt.md  # Extraction prompt philosophy and iteration guide
 ├── drizzle.config.ts         # Local Drizzle Kit config (reads DATABASE_URL)
 ├── drizzle.config.prod.ts    # Production config (reads PROD_DATABASE_URL, throws if missing)
 ├── wrangler.toml             # Cloudflare Worker config
@@ -91,9 +106,17 @@ packages/server/
 ├── .env.example              # Template, committed
 ├── .env.local                # GITIGNORED, developer-specific
 └── .dev.vars                 # GITIGNORED, Wrangler local secrets
+packages/eval/
+├── src/
+│   ├── fixtures.ts           # Labeled extraction test cases
+│   └── run.ts                # Eval harness runner
+├── package.json
+└── tsconfig.json
 infra/
 └── migrations/               # Generated SQL migrations (portable)
 ├── 0000_pink_red_wolf.sql
+├── 0001_funny_joystick.sql
+├── 0002_shallow_risque.sql
 └── meta/                 # Drizzle Kit state snapshots
 supabase/
 ├── config.toml               # Local Supabase CLI config
@@ -135,17 +158,25 @@ pnpm db:studio                                  # Launch Drizzle Studio (local w
 
 **Drizzle's custom vector type uses 512 dimensions, not 1536** — we use Matryoshka truncation of OpenAI's `text-embedding-3-small` to cut storage in half while retaining ~97% of quality. Do not change this without considering the storage implications.
 
-## Current state (April 2026, end of Session 2)
+## Current state (April 2026, end of Session 3)
 
-The server API and TypeScript SDK are functional. The extraction pipeline is not yet built.
+The server API, TypeScript SDK, and extraction pipeline are functional. All eight `/v1/*` routes are live.
 
 What exists:
 - Monorepo structure with pnpm workspaces
-- `packages/server` with Hono, Drizzle, API key auth middleware, and five live `/v1/*` routes (`set`, `get`, `recall`, `remove`, `health`) plus three that return 404 until Session 3 (`commit`, `memories`, `memories/:id`). A catch-all 404 handler on the v1 sub-app returns the standard `{ error: { code, message } }` envelope for unknown routes.
-- `packages/sdk` (`@withmemory/sdk`) — TypeScript SDK with dual ESM/CJS output via tsup, zero runtime dependencies. Exports a `memory` singleton and a `createClient()` factory. All 10 methods implemented as fetch wrappers against the server API. See `packages/sdk/API.md` for the canonical contract.
-- Database schema for four tables (`wm_accounts`, `wm_api_keys`, `wm_end_users`, `wm_memories`) applied to both local and production
+- `packages/server` with Hono, Drizzle, API key auth middleware, and eight live `/v1/*` routes (`set`, `get`, `recall`, `remove`, `health`, `commit`, `memories`, `memories/:id`). A catch-all 404 handler on the v1 sub-app returns the standard `{ error: { code, message } }` envelope for unknown routes.
+- `packages/sdk` (`@withmemory/sdk`) — TypeScript SDK with dual ESM/CJS output via tsup, zero runtime dependencies. Exports a `memory` singleton and a `createClient()` factory. All 10 methods are live. `register()` stores defaults and forwards them to `recall()`. See `packages/sdk/API.md` for the canonical contract.
+- Database schema for five tables (`wm_accounts`, `wm_api_keys`, `wm_end_users`, `wm_exchanges`, `wm_memories`) applied to local (production pending)
+- `wm_exchanges` table stores conversation turns from `commit()` with extraction status tracking
+- `wm_memories.exchange_id` FK links extracted memories to their source exchange
+- LLM extraction library (`packages/server/src/lib/extraction.ts`) using direct OpenAI fetch (gpt-4.1-mini for extraction, text-embedding-3-small at 512 dimensions for embeddings)
+- `POST /v1/commit` returns 202 immediately, runs extraction async via `waitUntil`, supports Idempotency-Key header
+- `register()` defaults wired through `recall()` as tier 4 fallback — appears in `promptBlock` only, not in the `memories` array
+- `WorkerEnv` type centralized in `packages/server/src/types.ts` — all env vars declared once
+- `ensureEndUser()` helper shared across `set.ts` and `commit.ts`
 - API key authentication middleware (SHA-256 hash, Bearer token, `last_used_at` updated via `ctx.waitUntil`)
-- E2E test suite: 17 tests covering set, get, recall, remove, health, auth, validation, and 404 handling — passing against both local and production
+- E2E test suite: 27 tests covering all eight routes plus auth, validation, idempotency, and defaults — passing against local
+- `packages/eval/` — extraction eval harness with 12 labeled fixtures and quality scoring
 - `examples/vercel-ai-sdk/` — integration example demonstrating set → recall → LLM call → commit against `api.withmemory.dev`
 - Local development environment via Supabase CLI + Docker
 - Production deployment pipeline via Wrangler (`pnpm worker:deploy`)
@@ -153,11 +184,10 @@ What exists:
 - Git repository at `github.com/withmemory-dev/withmemory` (private)
 
 What does not yet exist:
-- `POST /v1/commit` server route (extraction pipeline — Session 3)
-- `POST /v1/memories` and `DELETE /v1/memories/:id` server routes (Session 3)
-- The LLM extraction pipeline
-- Embedding generation and vector similarity search
-- Deduplication and conflict resolution
+- Production deployment of Session 3 changes (migration + env vars + deploy pending)
+- Semantic ranking in recall (Session 4 — currently naive `updated_at DESC`)
+- Deduplication and conflict resolution (Session 4)
+- Real tokenizer for the trim loop (Session 4)
 - The dashboard (`apps/dashboard` is empty)
 - Documentation site
 - Billing integration
@@ -188,12 +218,30 @@ When touching the database schema:
 6. Apply to production: `pnpm db:migrate:prod`
 7. Commit the schema change and the migration together
 
+## Repository hygiene
+
+This repo is built as if fully open — every file should be appropriate for a public repository.
+
+**Never commit strategic context.** Competitive positioning, pricing analysis, kill criteria, and investor framing live outside the repo. Do not reference out-of-repo strategic documents by path, quote their framing in code comments, commit messages, docs, tests, or fixtures, or mention competitors by name except where CLAUDE.md or API.md already do so.
+
+**Never commit secrets.** No API keys, passwords, or tokens in code, comments, commit messages, or test fixtures. Real values go in `.env.local`, `.dev.vars`, or `wrangler secret put`.
+
+**Never commit the extraction prompt text.** The prompt lives in `EXTRACTION_PROMPT` env var. The repo documents the philosophy and iteration process in `packages/server/docs/extraction-prompt.md`, not the prompt itself.
+
+When in doubt, leave it out. If something would be surprising or inappropriate in a public clone, it doesn't belong.
+
 ## Reference files
 
 - `SETUP.md` — Human-readable setup guide
 - `CONTRIBUTING.md` — How to contribute (placeholder)
-- `packages/server/src/db/schema.ts` — Database schema
+- `packages/server/src/db/schema.ts` — Database schema (5 tables)
 - `packages/server/src/db/client.ts` — Database connection factory
+- `packages/server/src/types.ts` — WorkerEnv and AppVariables types
 - `packages/server/src/index.ts` — Hono server entry point
+- `packages/server/src/lib/extraction.ts` — LLM extraction and embedding library
+- `packages/server/src/lib/end-users.ts` — Shared end-user upsert helper
+- `packages/server/docs/extraction-prompt.md` — Extraction prompt iteration guide
 - `packages/server/wrangler.toml` — Worker configuration
+- `packages/sdk/API.md` — Canonical SDK contract reference
+- `packages/eval/` — Extraction quality eval harness
 - `infra/migrations/` — Generated SQL migrations
