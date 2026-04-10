@@ -315,7 +315,10 @@ export function recallRoute() {
     // because similarity weight is 0) and the fallback weights.
     const rankingInputEmbedding: number[] =
       queryEmbedding ?? new Array(EMBEDDING_DIMENSIONS).fill(0);
-    const weights = strategy === "semantic" ? undefined : FALLBACK_WEIGHTS;
+    const weights =
+      strategy === "semantic"
+        ? { similarityFloor: 0.25 }
+        : FALLBACK_WEIGHTS;
 
     const ranked = rankMemories(
       candidates,
