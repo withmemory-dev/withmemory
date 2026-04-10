@@ -1,11 +1,12 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull, isNotNull } from "drizzle-orm";
 import * as schema from "../../db/schema";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { ensureEndUser } from "../../lib/end-users";
 import { runExtraction, parseMaxInputBytes } from "../../lib/extraction";
+import { classifyFact, type ExistingMemory } from "../../lib/dedup";
 import EXTRACTION_PROMPT from "../../lib/extraction-prompt.txt";
 
 const { wmExchanges, wmMemories } = schema;
@@ -145,24 +146,87 @@ export function commitRoute() {
             return;
           }
 
-          // Insert extracted memories
-          await db.insert(wmMemories).values(
-            result.memories.map((m) => ({
-              accountId: account.id,
-              endUserId: endUser.id,
-              key: null,
-              content: m.content,
-              source: "extracted" as const,
-              embedding: m.embedding,
-              exchangeId: exchange.id,
-              importance: 0.5,
-            }))
-          );
+          // ── Dedup: fetch existing memories for this user ──────────
+          const existingRows = await db
+            .select({
+              id: wmMemories.id,
+              content: wmMemories.content,
+              embedding: wmMemories.embedding,
+              source: wmMemories.source,
+              key: wmMemories.key,
+            })
+            .from(wmMemories)
+            .where(
+              and(
+                eq(wmMemories.accountId, account.id),
+                eq(wmMemories.endUserId, endUser.id),
+                isNull(wmMemories.supersededBy),
+                isNotNull(wmMemories.embedding)
+              )
+            );
+
+          // Cast rows to the shape classifyFact expects (embedding is
+          // non-null because of the isNotNull filter above).
+          const existingMemories: ExistingMemory[] = existingRows.map((r) => ({
+            id: r.id,
+            content: r.content,
+            embedding: r.embedding as number[],
+            source: r.source,
+            key: r.key,
+          }));
+
+          // ── Classify and execute each extracted fact ────────────
+          for (const m of result.memories) {
+            if (!m.embedding) {
+              // No embedding — insert without dedup (rare fallback path)
+              await db.insert(wmMemories).values({
+                accountId: account.id,
+                endUserId: endUser.id,
+                key: null,
+                content: m.content,
+                source: "extracted" as const,
+                embedding: null,
+                exchangeId: exchange.id,
+                importance: 0.5,
+              });
+              continue;
+            }
+
+            const action = classifyFact(
+              { content: m.content, embedding: m.embedding },
+              existingMemories
+            );
+
+            if (action.type === "skip") {
+              continue;
+            }
+
+            const [inserted] = await db
+              .insert(wmMemories)
+              .values({
+                accountId: account.id,
+                endUserId: endUser.id,
+                key: null,
+                content: m.content,
+                source: "extracted" as const,
+                embedding: m.embedding,
+                exchangeId: exchange.id,
+                importance: 0.5,
+              })
+              .returning({ id: wmMemories.id });
+
+            if (action.type === "supersede") {
+              await db
+                .update(wmMemories)
+                .set({ supersededBy: inserted.id })
+                .where(eq(wmMemories.id, action.oldMemoryId));
+            }
+          }
 
           await db
             .update(wmExchanges)
             .set({
-              extractionStatus: result.error ? "completed" : "completed",
+              extractionStatus: "completed",
               extractionError: result.error,
               extractionCompletedAt: new Date(),
             })
