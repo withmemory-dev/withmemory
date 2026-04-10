@@ -46,7 +46,7 @@ export function setRoute() {
     // null-embedding path, which bypasses the floor.
     let embedding: number[] | null = null;
     const apiKey = c.env.OPENAI_API_KEY;
-    if (apiKey && value.length >= 30) {
+    if (apiKey && value.length >= 20) {
       try {
         const results = await embedTexts(apiKey, [value]);
         embedding = results[0] ?? null;
