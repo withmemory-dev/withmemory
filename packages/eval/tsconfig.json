@@ -2,8 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["src", "../server/src/lib/text-modules.d.ts"]
+  "include": ["src", "fixtures", "../server/src/lib/text-modules.d.ts"]
 }

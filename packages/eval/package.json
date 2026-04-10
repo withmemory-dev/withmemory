@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "eval": "tsx src/run.ts",
+    "test:recall-eval": "tsx src/recall-runner.ts",
+    "test:recall-baseline": "tsx src/recall-runner.ts --baseline",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
