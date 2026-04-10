@@ -464,6 +464,15 @@ test("floor drops all real-embedding candidates if none meet threshold", () => {
   assertEqual(ranked.length, 0, "all dropped");
 });
 
+test("explicit-source candidate bypasses the floor even with low similarity", () => {
+  const query = [1, 0, 0, 0];
+  const explicit = mem("ex", { embedding: [0.1, 0.99, 0, 0], source: "explicit", updatedAt: NOW });
+  const extracted = mem("exr", { embedding: [0.1, 0.99, 0, 0], source: "extracted", updatedAt: NOW });
+  const ranked = rankMemories([explicit, extracted], query, { similarityFloor: 0.3 }, NOW);
+  assertEqual(ranked.length, 1, "only explicit survives");
+  assertEqual(ranked[0].id, "ex", "explicit bypasses floor");
+});
+
 test("floor preserves null-embedding candidates even when all real ones are dropped", () => {
   const query = [1, 0, 0, 0];
   const candidates = [

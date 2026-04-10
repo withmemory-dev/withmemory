@@ -4,6 +4,7 @@ import { zValidator } from "@hono/zod-validator";
 import * as schema from "../../db/schema";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { ensureEndUser } from "../../lib/end-users";
+import { embedTexts } from "../../lib/embeddings";
 
 const { wmMemories } = schema;
 
@@ -38,6 +39,26 @@ export function setRoute() {
 
     const endUser = await ensureEndUser(db, account.id, userId);
 
+    // Generate embedding for the value (best-effort, null on failure)
+    let embedding: number[] | null = null;
+    const apiKey = c.env.OPENAI_API_KEY;
+    if (apiKey) {
+      try {
+        const results = await embedTexts(apiKey, [value]);
+        embedding = results[0] ?? null;
+      } catch (err) {
+        console.warn(
+          `set: embedding failed for key="${key}" (account=${account.id}): ${
+            err instanceof Error ? err.message : "unknown error"
+          }`
+        );
+      }
+    } else {
+      console.warn(
+        `set: OPENAI_API_KEY not configured, storing without embedding (account=${account.id})`
+      );
+    }
+
     // Upsert memory: insert or update on (account, end_user, key) conflict
     const [memory] = await db
       .insert(wmMemories)
@@ -47,11 +68,13 @@ export function setRoute() {
         key,
         content: value,
         source: "explicit",
+        embedding,
       })
       .onConflictDoUpdate({
         target: [wmMemories.accountId, wmMemories.endUserId, wmMemories.key],
         set: {
           content: value,
+          embedding,
           updatedAt: new Date(),
         },
       })

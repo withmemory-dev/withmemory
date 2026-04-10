@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import { eq, and, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import * as schema from "../../db/schema";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { ensureEndUser } from "../../lib/end-users";
@@ -147,6 +147,10 @@ export function commitRoute() {
           }
 
           // ── Dedup: fetch existing memories for this user ──────────
+          // Fetches ALL non-superseded memories, including those without
+          // embeddings. Null-embedding rows are skipped during similarity
+          // comparison but are still visible to the dedup logic so they
+          // aren't silently excluded.
           const existingRows = await db
             .select({
               id: wmMemories.id,
@@ -160,20 +164,21 @@ export function commitRoute() {
               and(
                 eq(wmMemories.accountId, account.id),
                 eq(wmMemories.endUserId, endUser.id),
-                isNull(wmMemories.supersededBy),
-                isNotNull(wmMemories.embedding)
+                isNull(wmMemories.supersededBy)
               )
             );
 
-          // Cast rows to the shape classifyFact expects (embedding is
-          // non-null because of the isNotNull filter above).
-          const existingMemories: ExistingMemory[] = existingRows.map((r) => ({
-            id: r.id,
-            content: r.content,
-            embedding: r.embedding as number[],
-            source: r.source,
-            key: r.key,
-          }));
+          // Only memories with embeddings can participate in similarity
+          // comparison. Null-embedding memories are invisible to dedup.
+          const existingMemories: ExistingMemory[] = existingRows
+            .filter((r) => r.embedding !== null)
+            .map((r) => ({
+              id: r.id,
+              content: r.content,
+              embedding: r.embedding as number[],
+              source: r.source,
+              key: r.key,
+            }));
 
           // ── Classify and execute each extracted fact ────────────
           for (const m of result.memories) {

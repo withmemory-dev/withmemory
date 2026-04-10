@@ -105,11 +105,11 @@ tests.push({
       res.body.promptBlock.includes("subscription: pro"),
       `promptBlock missing "subscription: pro"`
     );
-    // Verify ordering: most recently updated first (subscription → role → name)
-    const keys = res.body.memories.map((m: any) => m.key);
-    assert(keys[0] === "subscription", `expected first key "subscription", got "${keys[0]}"`);
-    assert(keys[1] === "role", `expected second key "role", got "${keys[1]}"`);
-    assert(keys[2] === "name", `expected third key "name", got "${keys[2]}"`);
+    // Verify all three keys are present (order depends on semantic ranking)
+    const keys = new Set(res.body.memories.map((m: any) => m.key));
+    assert(keys.has("subscription"), `missing key "subscription"`);
+    assert(keys.has("role"), `missing key "role"`);
+    assert(keys.has("name"), `missing key "name"`);
   },
 });
 
@@ -119,9 +119,6 @@ tests.push({
     const res = await apiCall("/v1/recall", { userId, input: "hi", maxItems: 2 });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memories.length === 2, `expected 2 memories, got ${res.body.memories.length}`);
-    const keys = res.body.memories.map((m: any) => m.key);
-    assert(keys[0] === "subscription", `expected first key "subscription", got "${keys[0]}"`);
-    assert(keys[1] === "role", `expected second key "role", got "${keys[1]}"`);
   },
 });
 
