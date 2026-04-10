@@ -317,7 +317,7 @@ export function recallRoute() {
       queryEmbedding ?? new Array(EMBEDDING_DIMENSIONS).fill(0);
     const weights =
       strategy === "semantic"
-        ? { similarityFloor: 0.25 }
+        ? { similarityFloor: 0.2 }
         : FALLBACK_WEIGHTS;
 
     const ranked = rankMemories(

@@ -27,6 +27,11 @@ if (!OPENAI_API_KEY) {
 
 const BASELINE_MODE = process.argv.includes("--baseline");
 
+// Similarity floor passed to rankMemories on the semantic path.
+// Override via --floor=0.3 on the command line for tuning.
+const floorArg = process.argv.find((a) => a.startsWith("--floor="));
+const SIMILARITY_FLOOR = floorArg ? parseFloat(floorArg.split("=")[1]) : 0.2;
+
 // ─── Embedding cache ────────────────────────────────────────────────────────
 
 const embeddingCache = new Map<string, number[]>();
@@ -170,7 +175,12 @@ async function evaluateFixture(
     ranked = sorted.slice(0, topK);
   } else {
     // Semantic ranking via the real rankMemories function
-    const scored: ScoredMemory[] = rankMemories(candidates, queryEmbedding, {}, now);
+    const scored: ScoredMemory[] = rankMemories(
+      candidates,
+      queryEmbedding,
+      { similarityFloor: SIMILARITY_FLOOR },
+      now
+    );
     ranked = scored.slice(0, topK);
   }
 
@@ -189,6 +199,9 @@ async function main() {
   const mode = BASELINE_MODE ? "BASELINE (updatedAt DESC)" : "SEMANTIC (rankMemories)";
   console.log(`\nWithMemory Recall Eval Harness`);
   console.log(`Mode: ${mode}`);
+  if (!BASELINE_MODE) {
+    console.log(`Similarity floor: ${SIMILARITY_FLOOR}`);
+  }
   console.log(`Fixtures: ${fixtures.length}\n`);
 
   const start = performance.now();
@@ -252,6 +265,9 @@ async function main() {
 
   console.log(`\n${"=".repeat(60)}`);
   console.log(`  mode:              ${mode}`);
+  if (!BASELINE_MODE) {
+    console.log(`  similarity_floor:  ${SIMILARITY_FLOOR}`);
+  }
   console.log(`  pass_rate:         ${totalPass}/${results.length} (${(passRate * 100).toFixed(1)}%)`);
   console.log(`  avg_precision:     ${(avgPrecision * 100).toFixed(1)}%`);
   console.log(`  avg_recall:        ${(avgRecall * 100).toFixed(1)}%`);
