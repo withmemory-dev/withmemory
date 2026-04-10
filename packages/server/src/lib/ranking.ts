@@ -178,10 +178,8 @@ export function rankMemories(
   const w: RankingWeights = { ...DEFAULT_RANKING_WEIGHTS, ...weights };
 
   // First pass: compute similarity and apply the floor filter.
-  // The floor only applies to extracted memories with real embeddings.
+  // Candidates with real embeddings below the floor are excluded.
   // Null-embedding candidates bypass the floor (no real similarity signal).
-  // Explicit-source candidates bypass the floor (developer-set facts should
-  // always be considered regardless of embedding similarity).
   const withSimilarity: { mem: RankableMemory; similarity: number }[] = [];
   for (const mem of candidates) {
     let similarity: number;
@@ -190,11 +188,7 @@ export function rankMemories(
     } else {
       const raw = cosineSimilarity(queryEmbedding, mem.embedding);
       similarity = Math.max(0, Math.min(1, raw));
-      if (
-        w.similarityFloor > 0 &&
-        similarity < w.similarityFloor &&
-        mem.source === "extracted"
-      ) {
+      if (w.similarityFloor > 0 && similarity < w.similarityFloor) {
         continue; // below floor — exclude
       }
     }

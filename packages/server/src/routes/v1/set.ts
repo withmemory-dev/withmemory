@@ -39,10 +39,14 @@ export function setRoute() {
 
     const endUser = await ensureEndUser(db, account.id, userId);
 
-    // Generate embedding for the value (best-effort, null on failure)
+    // Generate embedding for the value (best-effort, null on failure).
+    // Terse values (< 30 chars, e.g. "Andrew", "pro") embed poorly and
+    // would be unfairly killed by the similarity floor. They store
+    // embedding: null and get the 0.5 fallback score via the existing
+    // null-embedding path, which bypasses the floor.
     let embedding: number[] | null = null;
     const apiKey = c.env.OPENAI_API_KEY;
-    if (apiKey) {
+    if (apiKey && value.length >= 30) {
       try {
         const results = await embedTexts(apiKey, [value]);
         embedding = results[0] ?? null;
@@ -53,10 +57,6 @@ export function setRoute() {
           }`
         );
       }
-    } else {
-      console.warn(
-        `set: OPENAI_API_KEY not configured, storing without embedding (account=${account.id})`
-      );
     }
 
     // Upsert memory: insert or update on (account, end_user, key) conflict
