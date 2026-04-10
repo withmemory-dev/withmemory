@@ -7,6 +7,7 @@
     "dev": "wrangler dev",
     "worker:deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
+    "test:ranking": "tsx scripts/test-ranking.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:prod": "drizzle-kit migrate --config=drizzle.config.prod.ts",
