@@ -1,3 +1,5 @@
+import { embedTexts } from "./embeddings";
+
 /**
  * LLM extraction and embedding generation via direct OpenAI API calls.
  *
@@ -53,7 +55,7 @@ export async function runExtraction(params: {
   // Step 2: Generate embeddings for all extracted memories in one batch
   let embeddings: (number[] | null)[];
   try {
-    embeddings = await callEmbeddings(openaiApiKey, rawMemories);
+    embeddings = await embedTexts(openaiApiKey, rawMemories);
   } catch (err) {
     // Extraction succeeded but embedding failed — return memories without vectors
     return {
@@ -133,46 +135,6 @@ async function callExtraction(
 
   // Filter to strings only, ignore anything else
   return memories.filter((m): m is string => typeof m === "string" && m.trim().length > 0);
-}
-
-// ─── OpenAI Embeddings ───────────────────────────────────────────────────────
-
-async function callEmbeddings(apiKey: string, texts: string[]): Promise<(number[] | null)[]> {
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "text-embedding-3-small",
-      dimensions: 512,
-      input: texts,
-    }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`OpenAI embeddings API returned ${response.status}: ${text.slice(0, 200)}`);
-  }
-
-  const body = (await response.json()) as {
-    data?: { embedding: number[]; index: number }[];
-  };
-
-  if (!body.data || !Array.isArray(body.data)) {
-    throw new Error("OpenAI embeddings response missing data array");
-  }
-
-  // Sort by index to match input order, validate dimension count
-  const sorted = [...body.data].sort((a, b) => a.index - b.index);
-
-  return sorted.map((item) => {
-    if (!Array.isArray(item.embedding) || item.embedding.length !== 512) {
-      return null;
-    }
-    return item.embedding;
-  });
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
