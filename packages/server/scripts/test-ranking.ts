@@ -416,7 +416,67 @@ test("updatedAt DESC beats id lexicographic in tiebreaker", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 8. Edge cases
+// 8. Similarity floor
+// ─────────────────────────────────────────────────────────────────────────────
+
+section("similarity floor");
+
+test("floor of 0.3 drops candidate with similarity 0.2, keeps one with 0.5", () => {
+  // query = [1,0,0,0]
+  // low = [0.2, 0.98, 0, 0] → cosine ~ 0.2 → below 0.3 floor
+  // high = [0.5, 0.5, 0.5, 0.5] → cosine ~ 0.5 → above 0.3 floor
+  const query = [1, 0, 0, 0];
+  const low = mem("low", { embedding: [0.2, 0.98, 0, 0], updatedAt: NOW });
+  const high = mem("high", { embedding: [0.5, 0.5, 0.5, 0.5], updatedAt: NOW });
+  const ranked = rankMemories([low, high], query, { similarityFloor: 0.3 }, NOW);
+  assertEqual(ranked.length, 1, "one candidate survives");
+  assertEqual(ranked[0].id, "high", "high-similarity candidate kept");
+});
+
+test("null-embedding candidate survives the floor", () => {
+  const query = [1, 0, 0, 0];
+  const nullMem = mem("null", { embedding: null, updatedAt: NOW });
+  const lowSim = mem("low", { embedding: [0.1, 0.99, 0, 0], updatedAt: NOW });
+  const ranked = rankMemories([nullMem, lowSim], query, { similarityFloor: 0.3 }, NOW);
+  assertEqual(ranked.length, 1, "one candidate survives");
+  assertEqual(ranked[0].id, "null", "null-embedding bypasses floor");
+});
+
+test("floor of 0 (default) changes nothing", () => {
+  const query = [1, 0, 0, 0];
+  const candidates = [
+    mem("a", { embedding: [0.1, 0.99, 0, 0], updatedAt: NOW }),
+    mem("b", { embedding: [1, 0, 0, 0], updatedAt: NOW }),
+  ];
+  const withFloor = rankMemories(candidates, query, { similarityFloor: 0 }, NOW);
+  const withoutFloor = rankMemories(candidates, query, undefined, NOW);
+  assertEqual(withFloor.length, withoutFloor.length, "same count");
+  assertEqual(withFloor[0].id, withoutFloor[0].id, "same order");
+});
+
+test("floor drops all real-embedding candidates if none meet threshold", () => {
+  const query = [1, 0, 0, 0];
+  const candidates = [
+    mem("a", { embedding: [0, 1, 0, 0], updatedAt: NOW }),
+    mem("b", { embedding: [0, 0, 1, 0], updatedAt: NOW }),
+  ];
+  const ranked = rankMemories(candidates, query, { similarityFloor: 0.5 }, NOW);
+  assertEqual(ranked.length, 0, "all dropped");
+});
+
+test("floor preserves null-embedding candidates even when all real ones are dropped", () => {
+  const query = [1, 0, 0, 0];
+  const candidates = [
+    mem("real", { embedding: [0, 1, 0, 0], updatedAt: NOW }),
+    mem("null", { embedding: null, source: "explicit", updatedAt: NOW }),
+  ];
+  const ranked = rankMemories(candidates, query, { similarityFloor: 0.5 }, NOW);
+  assertEqual(ranked.length, 1, "one survives");
+  assertEqual(ranked[0].id, "null", "null-embedding survives");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. Edge cases
 // ─────────────────────────────────────────────────────────────────────────────
 
 section("edge cases");

@@ -47,6 +47,13 @@ export type RankingWeights = {
   tierExtracted: number;
   /** Similarity score assigned to memories with a null embedding. */
   nullEmbeddingFallback: number;
+  /**
+   * Minimum cosine similarity for candidates with real embeddings. Candidates
+   * below this threshold are excluded before scoring. Does NOT apply to
+   * null-embedding candidates (they have no real similarity signal).
+   * Default: 0 (no filtering).
+   */
+  similarityFloor: number;
 };
 
 export const DEFAULT_RANKING_WEIGHTS: RankingWeights = {
@@ -57,6 +64,7 @@ export const DEFAULT_RANKING_WEIGHTS: RankingWeights = {
   tierExplicit: 1.0,
   tierExtracted: 0.7,
   nullEmbeddingFallback: 0.5,
+  similarityFloor: 0,
 };
 
 export type ScoreComponents = {
@@ -169,17 +177,26 @@ export function rankMemories(
 
   const w: RankingWeights = { ...DEFAULT_RANKING_WEIGHTS, ...weights };
 
-  const scored: ScoredMemory[] = candidates.map((mem) => {
-    // Similarity component — clamped to [0, 1]. Null embedding falls back
-    // to the configured constant (explicit memories without embeddings).
+  // First pass: compute similarity and apply the floor filter.
+  // Candidates with real embeddings below the floor are excluded.
+  // Null-embedding candidates bypass the floor (no real similarity signal).
+  const withSimilarity: { mem: RankableMemory; similarity: number }[] = [];
+  for (const mem of candidates) {
     let similarity: number;
     if (mem.embedding === null) {
       similarity = w.nullEmbeddingFallback;
     } else {
       const raw = cosineSimilarity(queryEmbedding, mem.embedding);
       similarity = Math.max(0, Math.min(1, raw));
+      if (w.similarityFloor > 0 && similarity < w.similarityFloor) {
+        continue; // below floor — exclude
+      }
     }
+    withSimilarity.push({ mem, similarity });
+  }
 
+  // Second pass: score survivors.
+  const scored: ScoredMemory[] = withSimilarity.map(({ mem, similarity }) => {
     // Recency component — always in [0, 1].
     const recency = recencyScore(mem.updatedAt, now, w.recencyHalfLifeDays);
 
