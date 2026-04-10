@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, isNull } from "drizzle-orm";
 import * as schema from "../../db/schema";
 import type { WorkerEnv, AppVariables } from "../../types";
 
@@ -51,7 +51,7 @@ export function memoriesRoute() {
     const rows = await db
       .select()
       .from(wmMemories)
-      .where(and(eq(wmMemories.accountId, account.id), eq(wmMemories.endUserId, endUser.id)))
+      .where(and(eq(wmMemories.accountId, account.id), eq(wmMemories.endUserId, endUser.id), isNull(wmMemories.supersededBy)))
       .orderBy(desc(wmMemories.updatedAt));
 
     return c.json(
