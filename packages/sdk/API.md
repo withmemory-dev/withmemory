@@ -73,8 +73,20 @@ interface Memory {
 interface RecallResponse {
   promptBlock: string;       // Always a string, never null. Empty string if no memories.
   memories: Memory[];        // The memories that contributed to the promptBlock.
+  ranking: {
+    strategy: "semantic" | "recency_importance" | "user_not_found";
+    reason?: "embedding_unavailable";
+  };
 }
 ```
+
+The `ranking` field describes how the returned memories were ordered:
+
+- **`"semantic"`** — memories were ranked by cosine similarity against an embedding of the query input, combined with recency decay, importance, and source tier. This is the normal path.
+- **`"recency_importance"`** — the query embedding could not be generated (typically because the embeddings API was unavailable), so memories were ranked by recency and importance only, with source tier still applied. The `reason` field is set to `"embedding_unavailable"` in this case. Clients can choose to retry, degrade, or proceed with the returned memories as-is.
+- **`"user_not_found"`** — the requested `userId` does not exist under the authenticated account, so there were no memories to rank. The `memories` array is empty. The `promptBlock` may still contain registered defaults if any were provided in the request. This is not an error; it's a normal response for first-contact with a new end user.
+
+The `ranking` field is additive and backward-compatible. SDK clients that don't know about it will continue to work unchanged. The SDK's `RecallResponse` type does not yet expose `ranking` — that's a followup in a subsequent SDK commit.
 
 ### SetResponse
 
