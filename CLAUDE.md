@@ -181,7 +181,7 @@ What exists:
 - `WorkerEnv` type centralized in `packages/server/src/types.ts` — all env vars declared once
 - `ensureEndUser()` helper shared across `set.ts` and `commit.ts`
 - API key authentication middleware (SHA-256 hash, Bearer token, `last_used_at` updated via `ctx.waitUntil`)
-- E2E test suite: 33 tests covering all routes plus auth, validation, idempotency, defaults, extraction prompt CRUD, and cross-account ownership — passing against local
+- E2E test suite: 34 tests covering all routes plus auth, validation, idempotency, defaults, SDK register() → recall() flow, extraction prompt CRUD, and cross-account ownership — passing against local
 - `packages/eval/` — extraction eval harness with 12 labeled fixtures and quality scoring
 - `examples/vercel-ai-sdk/` — integration example demonstrating set → recall → LLM call → commit against `api.withmemory.dev`
 - Local development environment via Supabase CLI + Docker
@@ -190,9 +190,10 @@ What exists:
 - Git repository at `github.com/withmemory-dev/withmemory` (private)
 
 What does not yet exist:
-- Semantic ranking in recall (Session 4 — currently naive `updated_at DESC`)
-- Deduplication and conflict resolution (Session 4)
-- Real tokenizer for the trim loop (Session 4)
+- ~~Semantic ranking in recall~~ (done — Session 6)
+- ~~Deduplication and conflict resolution~~ (done — Session 5)
+- ~~register() → server defaults forwarding~~ (done — Session 6, Phase 2b; `recall()` merges registered + per-call defaults and forwards to server)
+- Real tokenizer for the trim loop
 - The dashboard (`apps/dashboard` is empty)
 - Documentation site
 - Billing integration

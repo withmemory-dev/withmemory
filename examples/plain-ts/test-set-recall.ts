@@ -1,3 +1,5 @@
+import { createClient } from "../../packages/sdk/dist/index.js";
+
 const BASE_URL = process.env.WITHMEMORY_BASE_URL ?? "http://localhost:8787";
 const API_KEY = process.env.WITHMEMORY_API_KEY;
 const API_KEY_B = process.env.WITHMEMORY_API_KEY_B;
@@ -438,6 +440,26 @@ tests.push({
     assert(res.body.promptBlock.includes("plan: pro"), `expected "plan: pro" in promptBlock`);
     assert(res.body.promptBlock.includes("tier: beta"), `expected "tier: beta" in promptBlock`);
     assert(res.body.memories.length === 0, `expected 0 memories (defaults are not real memories)`);
+  },
+});
+
+// ── SDK register() + recall() defaults test ─────────────────────────────────
+
+tests.push({
+  name: "SDK register() defaults appear in recall() promptBlock",
+  fn: async () => {
+    const client = createClient({ apiKey: API_KEY!, baseUrl: BASE_URL });
+    client.register({ theme: "dark", language: "en" });
+    const result = await client.recall({
+      userId: "sdk_register_test_nonexistent_user",
+      input: "hello",
+    });
+    assert(result.promptBlock.includes("theme: dark"), `expected "theme: dark" in promptBlock`);
+    assert(
+      result.promptBlock.includes("language: en"),
+      `expected "language: en" in promptBlock`
+    );
+    assert(result.memories.length === 0, `expected 0 memories for nonexistent user`);
   },
 });
 
