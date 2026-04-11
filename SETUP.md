@@ -1,6 +1,6 @@
 # WithMemory — Setup and Development Guide
 
-**Status:** Pre-alpha. Infrastructure complete, product routes not yet built.
+**Status:** Pre-alpha. Server API, SDK, extraction pipeline, semantic ranking, and dedup are live. Dashboard and billing not yet built.
 **Last updated:** April 2026
 
 ## What is WithMemory
@@ -20,8 +20,8 @@ This repository contains the server (API + extraction pipeline), the client SDK,
 **Query layer:** Drizzle ORM (typed queries, schema as source of truth)
 **Driver:** postgres-js (serverless-friendly, works in Workers)
 **Migrations:** Drizzle Kit generates plain SQL files
-**Embeddings (planned):** OpenAI text-embedding-3-small at 512 dimensions
-**Extraction LLM (planned):** OpenAI gpt-4.1-mini
+**Embeddings:** OpenAI text-embedding-3-small at 512 dimensions (Matryoshka truncation)
+**Extraction LLM:** OpenAI gpt-4.1-mini
 
 The server is designed to be runtime-agnostic. The hosted version runs on Cloudflare Workers with Supabase Postgres. Self-hosters can run the same code on Node with any Postgres provider by swapping the `DATABASE_URL` and deploying via Docker.
 
@@ -30,18 +30,14 @@ withmemory/
 ├── packages/
 │   ├── sdk/              # @withmemory/sdk — TypeScript client (Apache 2.0)
 │   ├── server/           # API server, runs on Cloudflare Workers (BUSL 1.1)
-│   ├── extraction/       # LLM extraction pipeline
-│   ├── shared/           # Shared types and utilities
 │   └── eval/             # Extraction quality evaluation suite
-├── apps/
-│   ├── dashboard/        # Next.js dashboard at app.withmemory.dev
-│   └── docs/             # Documentation site
+├── examples/
+│   └── vercel-ai-sdk/    # Integration example with Vercel AI SDK
 ├── infra/
 │   └── migrations/       # Generated SQL migration files (portable)
-├── supabase/             # Local Supabase CLI config
-└── examples/             # Integration examples for various frameworks
+└── supabase/             # Local Supabase CLI config
 
-Packages follow the `@withmemory/*` naming convention on npm. Apps are deployed separately. Infra and supabase are tooling.
+Packages follow the `@withmemory/*` naming convention on npm. Infra and supabase are tooling.
 
 ## Prerequisites
 
@@ -69,7 +65,7 @@ cp packages/server/.env.example packages/server/.env.local
 Open `packages/server/.env.local` in your editor and set:
 
 - `DATABASE_URL` — already correct for local Supabase, leave as-is
-- `PROD_DATABASE_URL` — only needed if you're applying migrations to production
+- `PROD_DIRECT_URL` — only needed if you're applying migrations to production (direct connection, port 5432)
 
 Create `.dev.vars` for local Worker dev:
 ```bash
@@ -162,23 +158,23 @@ See `packages/server/src/db/schema.ts` for the full definitions.
 - **Marketing site (planned):** `https://withmemory.dev`
 - **Documentation (planned):** `https://withmemory.dev/docs` or subdomain
 
-## What exists (end of Session 3)
+## What exists
 
-- **Server routes:** All eight `/v1/*` routes are live locally: `POST /v1/set`, `/v1/get`, `/v1/recall`, `/v1/remove`, `/v1/commit`, `/v1/memories`, `DELETE /v1/memories/:id`, and `GET /v1/health`. All require Bearer token auth.
-- **Extraction pipeline:** `POST /v1/commit` accepts conversation turns, returns 202 immediately, and runs async LLM extraction via `waitUntil`. Extraction uses gpt-4.1-mini, embeddings use text-embedding-3-small at 512 dimensions. Supports `Idempotency-Key` header.
-- **SDK:** `@withmemory/sdk` at `packages/sdk/` — all 10 methods are live. `register()` stores defaults and forwards them to `recall()` as tier 4 fallback.
+- **Server routes:** Eleven `/v1/*` routes are live: `POST /v1/set`, `/v1/get`, `/v1/recall`, `/v1/remove`, `/v1/commit`, `/v1/memories`, `DELETE /v1/memories/:id`, `GET /v1/health`, and `POST/GET/DELETE /v1/account/extraction-prompt`. All require Bearer token auth.
+- **Extraction pipeline:** `POST /v1/commit` accepts conversation turns, returns 202 immediately, and runs async LLM extraction via `waitUntil`. Extraction uses gpt-4.1-mini, embeddings use text-embedding-3-small at 512 dimensions. Supports `Idempotency-Key` header. Customer-configurable extraction prompts via the account routes.
+- **Semantic ranking:** `recall()` ranks memories by cosine similarity, recency decay, importance, and source tier (explicit > extracted). Similarity floor at 0.2.
+- **Deduplication:** Extracted memories are classified against existing ones — near-duplicates (>=0.92) supersede, conflicts (0.78-0.92) respect explicit > extracted hierarchy, novel facts (<0.78) insert normally.
+- **SDK:** `@withmemory/sdk` at `packages/sdk/` — 13 methods live. `register()` stores defaults and forwards them to `recall()` as tier 4 fallback.
 - **Auth:** API key middleware with SHA-256 hash lookup and `last_used_at` fire-and-forget updates via `ctx.waitUntil`.
-- **E2E tests:** 27 tests passing against local, covering all eight routes plus auth, validation, idempotency, and defaults.
-- **Eval harness:** `packages/eval/` with 12 labeled fixtures for measuring extraction quality against the 70% empty target.
+- **E2E tests:** 35 tests passing against both local and production, covering all routes plus auth, validation, idempotency, defaults, SDK register flow, extraction prompt CRUD, and cross-account ownership.
+- **Eval harness:** `packages/eval/` with 50 extraction fixtures (extraction eval) and 30 recall fixtures (recall eval with ranking quality metrics).
 - **Example:** `examples/vercel-ai-sdk/` demonstrates the SDK integration pattern with the Vercel AI SDK.
 
 ## What is NOT yet built
 
-- Production deployment of Session 3 changes (migration + env vars + deploy)
-- Semantic ranking in recall (Session 4 — currently naive `updated_at DESC`)
-- Deduplication and conflict resolution (Session 4)
 - The dashboard at `app.withmemory.dev`
 - Billing integration
+- Documentation site
 - Open-source publication (repo goes public when server + SDK are ready)
 
 ## Further reading
