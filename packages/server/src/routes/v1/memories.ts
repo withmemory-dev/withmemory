@@ -3,12 +3,13 @@ import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { eq, and, desc, isNull } from "drizzle-orm";
 import * as schema from "../../db/schema";
+import { USER_ID_MAX_LENGTH } from "../../lib/validation";
 import type { WorkerEnv, AppVariables } from "../../types";
 
 const { wmEndUsers, wmMemories } = schema;
 
 const ListMemoriesSchema = z.object({
-  userId: z.string().min(1).max(255),
+  userId: z.string().min(1).max(USER_ID_MAX_LENGTH),
 });
 
 const listValidator = zValidator("json", ListMemoriesSchema, (result, c) => {

@@ -5,6 +5,7 @@ import { eq, and, isNull } from "drizzle-orm";
 import * as schema from "../../db/schema";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { ensureEndUser } from "../../lib/end-users";
+import { USER_ID_MAX_LENGTH } from "../../lib/validation";
 import { runExtraction, parseMaxInputBytes } from "../../lib/extraction";
 import { classifyFact, type ExistingMemory } from "../../lib/dedup";
 import EXTRACTION_PROMPT from "../../lib/extraction-prompt.txt";
@@ -12,7 +13,7 @@ import EXTRACTION_PROMPT from "../../lib/extraction-prompt.txt";
 const { wmExchanges, wmMemories } = schema;
 
 const CommitRequestSchema = z.object({
-  userId: z.string().min(1).max(255),
+  userId: z.string().min(1).max(USER_ID_MAX_LENGTH),
   input: z.string().min(1),
   output: z.string().min(1),
 });

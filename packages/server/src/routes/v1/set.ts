@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import * as schema from "../../db/schema";
+import { USER_ID_MAX_LENGTH } from "../../lib/validation";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { ensureEndUser } from "../../lib/end-users";
 import { embedTexts } from "../../lib/embeddings";
@@ -9,7 +10,7 @@ import { embedTexts } from "../../lib/embeddings";
 const { wmMemories } = schema;
 
 const SetRequestSchema = z.object({
-  userId: z.string().min(1).max(256),
+  userId: z.string().min(1).max(USER_ID_MAX_LENGTH),
   key: z.string().min(1).max(128),
   value: z.string().min(1).max(4096),
 });

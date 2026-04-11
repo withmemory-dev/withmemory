@@ -4,6 +4,7 @@ import { zValidator } from "@hono/zod-validator";
 import { eq, and, sql } from "drizzle-orm";
 import { isNull } from "drizzle-orm/sql/expressions/conditions";
 import * as schema from "../../db/schema";
+import { USER_ID_MAX_LENGTH } from "../../lib/validation";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { embedQuery, EMBEDDING_DIMENSIONS } from "../../lib/embeddings";
 import {
@@ -19,7 +20,7 @@ const { wmEndUsers, wmMemories } = schema;
 // ─────────────────────────────────────────────────────────────────────────────
 
 const RecallRequestSchema = z.object({
-  userId: z.string().min(1).max(256),
+  userId: z.string().min(1).max(USER_ID_MAX_LENGTH),
   input: z.string().min(1).max(8192),
   maxItems: z.number().int().min(1).max(50).optional(),
   maxTokens: z.number().int().min(10).max(2000).optional(),
