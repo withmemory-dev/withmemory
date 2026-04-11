@@ -228,11 +228,26 @@ export function commitRoute() {
               .returning({ id: wmMemories.id });
 
             if (action.type === "supersede") {
+              // DB update first, then in-memory splice — if the update
+              // fails and throws, existingMemories stays consistent.
               await db
                 .update(wmMemories)
                 .set({ supersededBy: inserted.id })
                 .where(eq(wmMemories.id, action.oldMemoryId));
+
+              const idx = existingMemories.findIndex((e) => e.id === action.oldMemoryId);
+              if (idx !== -1) existingMemories.splice(idx, 1);
             }
+
+            // Keep existingMemories in sync so subsequent iterations
+            // see this fact during dedup classification.
+            existingMemories.push({
+              id: inserted.id,
+              content: m.content,
+              embedding: m.embedding,
+              source: "extracted" as const,
+              key: null,
+            });
           }
 
           await db
