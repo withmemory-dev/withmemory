@@ -58,13 +58,12 @@ app.get("/health/db", async (c) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("health/db error", error);
+    console.error("health/db error:", error);
     return c.json(
       {
         status: "error",
         database: "disconnected",
-        message: error instanceof Error ? error.message : "Unknown error",
-        cause: error instanceof Error && error.cause ? String(error.cause) : undefined,
+        message: "Database connection failed",
       },
       503
     );
