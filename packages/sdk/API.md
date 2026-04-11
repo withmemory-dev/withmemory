@@ -27,6 +27,8 @@ class WithMemoryError extends Error {
 | `unauthorized`    | Server      | 401         | Missing, malformed, or invalid API key                      |
 | `invalid_request` | Server      | 400         | Request body fails Zod validation                           |
 | `not_found`       | Server      | 404         | Route does not exist or resource not found                   |
+| `quota_exceeded`  | Server      | 403         | Account memory limit reached                                |
+| `plan_required`   | Server      | 403         | Feature requires a higher plan tier                         |
 | `timeout`         | SDK         | 0           | Request exceeded the configured timeout                      |
 | `network_error`   | SDK         | 0           | Fetch failed (DNS, connection refused, TLS, offline, etc.)  |
 
@@ -44,7 +46,6 @@ These codes do not exist yet. They are listed here so nobody adds them premature
 |-----------------------|------------------------------------------------------|
 | `rate_limited`        | Account has exceeded its request quota                |
 | `extraction_failed`   | LLM extraction error surfaced to caller (currently internal-only on the exchange row) |
-| `quota_exceeded`      | Account has exceeded its memory storage quota         |
 | `internal_error`      | Unclassified server error (5xx)                      |
 
 ## Types

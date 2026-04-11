@@ -1,12 +1,55 @@
 import { createClient } from "../../packages/sdk/dist/index.js";
+import pgPkg from "postgres";
 
 const BASE_URL = process.env.WITHMEMORY_BASE_URL ?? "http://localhost:8787";
 const API_KEY = process.env.WITHMEMORY_API_KEY;
 const API_KEY_B = process.env.WITHMEMORY_API_KEY_B;
+const DATABASE_URL = process.env.DATABASE_URL;
 
 if (!API_KEY) {
   console.error("ERROR: WITHMEMORY_API_KEY is required. Pass it as an environment variable.");
   process.exit(1);
+}
+
+if (!DATABASE_URL) {
+  console.error("ERROR: DATABASE_URL is required for plan enforcement tests.");
+  process.exit(1);
+}
+
+// ── DB helper for plan enforcement tests ────────────────────────────────────
+// Direct DB connection for mutating test account state (plan tier, memory limit).
+// Uses the same postgres-js driver as the server.
+const testDb = pgPkg(DATABASE_URL, { max: 1, idle_timeout: 5 });
+
+let testAccountId: string;
+
+async function resolveTestAccountId(): Promise<string> {
+  const keyPrefix = API_KEY!.slice(0, 11);
+  const rows = await testDb`
+    SELECT a.id
+    FROM wm_api_keys k
+    JOIN wm_accounts a ON k.account_id = a.id
+    WHERE k.key_prefix = ${keyPrefix}
+    LIMIT 1
+  `;
+  if (rows.length === 0) throw new Error(`No account found for key prefix ${keyPrefix}`);
+  return rows[0].id;
+}
+
+async function updateTestAccount(patch: {
+  plan_tier?: string;
+  memory_limit?: number;
+  extraction_prompt?: string | null;
+}): Promise<void> {
+  if (patch.plan_tier !== undefined) {
+    await testDb`UPDATE wm_accounts SET plan_tier = ${patch.plan_tier} WHERE id = ${testAccountId}`;
+  }
+  if (patch.memory_limit !== undefined) {
+    await testDb`UPDATE wm_accounts SET memory_limit = ${patch.memory_limit} WHERE id = ${testAccountId}`;
+  }
+  if (patch.extraction_prompt !== undefined) {
+    await testDb`UPDATE wm_accounts SET extraction_prompt = ${patch.extraction_prompt} WHERE id = ${testAccountId}`;
+  }
 }
 
 const userId = `e2e_test_${Date.now()}`;
@@ -480,6 +523,13 @@ tests.push({
 });
 
 tests.push({
+  name: "[setup] Bump test account to pro for extraction prompt tests",
+  fn: async () => {
+    await updateTestAccount({ plan_tier: "pro" });
+  },
+});
+
+tests.push({
   name: "Set custom extraction prompt",
   fn: async () => {
     const res = await apiCall("/v1/account/extraction-prompt", {
@@ -550,6 +600,13 @@ tests.push({
   },
 });
 
+tests.push({
+  name: "[teardown] Restore test account to free tier after extraction prompt tests",
+  fn: async () => {
+    await updateTestAccount({ plan_tier: "free", extraction_prompt: null });
+  },
+});
+
 // ─�� Cross-account ownership test (requires WITHMEMORY_API_KEY_B) ────────���────
 
 if (API_KEY_B) {
@@ -598,29 +655,188 @@ if (API_KEY_B) {
   console.log("⚠ Skipping cross-account ownership test (WITHMEMORY_API_KEY_B not set)");
 }
 
+// ── Plan enforcement tests ──────────────��───────────────────────────────────
+// These tests mutate account state (plan tier, memory limit) via direct DB
+// access. Each case uses try/finally to guarantee teardown even on failure.
+
+const quotaUserId = `e2e_quota_${Date.now()}`;
+
+tests.push({
+  name: "quota_exceeded on /v1/set when memory limit reached",
+  fn: async () => {
+    // Query current memory count so we can set the limit relative to it.
+    // The account already has memories from earlier tests in this run.
+    const [{ count: existingCount }] = await testDb`
+      SELECT count(*)::int AS count FROM wm_memories
+      WHERE account_id = ${testAccountId} AND superseded_by IS NULL
+    `;
+    const tightLimit = existingCount + 3;
+    await updateTestAccount({ memory_limit: tightLimit });
+    try {
+      // Create 3 memories — should succeed (fills exactly to limit)
+      for (let i = 1; i <= 3; i++) {
+        const res = await apiCall("/v1/set", {
+          userId: quotaUserId,
+          key: `quota_key_${i}`,
+          value: `value_${i}`,
+        });
+        assert(res.status === 200, `set ${i}/3: expected 200, got ${res.status}`);
+      }
+
+      // 4th should be rejected
+      const res = await apiCall("/v1/set", {
+        userId: quotaUserId,
+        key: "quota_key_4",
+        value: "should_fail",
+      });
+      assert(res.status === 403, `4th set: expected 403, got ${res.status}`);
+      assert(
+        res.body.error?.code === "quota_exceeded",
+        `expected error.code "quota_exceeded", got "${res.body.error?.code}"`
+      );
+      assert(
+        res.body.error?.details?.current === tightLimit,
+        `expected details.current === ${tightLimit}, got ${res.body.error?.details?.current}`
+      );
+      assert(
+        res.body.error?.details?.limit === tightLimit,
+        `expected details.limit === ${tightLimit}, got ${res.body.error?.details?.limit}`
+      );
+    } finally {
+      // Teardown: restore limit and clean up memories via remove
+      await updateTestAccount({ memory_limit: 1000 });
+      for (let i = 1; i <= 3; i++) {
+        await apiCall("/v1/remove", { userId: quotaUserId, key: `quota_key_${i}` });
+      }
+    }
+  },
+});
+
+tests.push({
+  name: "quota_exceeded on /v1/commit when account at limit",
+  fn: async () => {
+    await updateTestAccount({ memory_limit: 0 });
+    try {
+      const res = await apiCall("/v1/commit", {
+        userId: quotaUserId,
+        input: "My favorite color is blue.",
+        output: "Got it!",
+      });
+      assert(res.status === 403, `expected 403, got ${res.status}`);
+      assert(
+        res.body.error?.code === "quota_exceeded",
+        `expected error.code "quota_exceeded", got "${res.body.error?.code}"`
+      );
+    } finally {
+      await updateTestAccount({ memory_limit: 1000 });
+    }
+  },
+});
+
+tests.push({
+  name: "plan_required on custom extraction prompt with free tier",
+  fn: async () => {
+    // Sanity check: account should already be free from earlier teardown
+    const rows = await testDb`
+      SELECT plan_tier FROM wm_accounts WHERE id = ${testAccountId}
+    `;
+    assert(rows[0].plan_tier === "free", `expected plan_tier "free", got "${rows[0].plan_tier}"`);
+
+    const res = await apiCall("/v1/account/extraction-prompt", {
+      prompt: "This should be rejected.",
+    });
+    assert(res.status === 403, `expected 403, got ${res.status}`);
+    assert(
+      res.body.error?.code === "plan_required",
+      `expected error.code "plan_required", got "${res.body.error?.code}"`
+    );
+    assert(
+      res.body.error?.details?.current_tier === "free",
+      `expected details.current_tier "free"`
+    );
+    const requiredTiers = res.body.error?.details?.required_tiers;
+    assert(
+      Array.isArray(requiredTiers) &&
+        requiredTiers.includes("pro") &&
+        requiredTiers.includes("team") &&
+        requiredTiers.includes("enterprise"),
+      `expected required_tiers to include pro, team, enterprise`
+    );
+  },
+});
+
+tests.push({
+  name: "Custom extraction prompt succeeds on pro tier",
+  fn: async () => {
+    await updateTestAccount({ plan_tier: "pro" });
+    try {
+      const res = await apiCall("/v1/account/extraction-prompt", {
+        prompt: "Pro-tier custom prompt for testing.",
+      });
+      assert(res.status === 200, `expected 200, got ${res.status}`);
+      assert(res.body.source === "custom", `expected source "custom"`);
+      assert(
+        res.body.prompt === "Pro-tier custom prompt for testing.",
+        `expected prompt to match`
+      );
+
+      // Verify via GET
+      const getRes = await fetch(`${BASE_URL}/v1/account/extraction-prompt`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${API_KEY}` },
+      });
+      const getBody = (await getRes.json()) as any;
+      assert(getBody.source === "custom", `GET: expected source "custom"`);
+      assert(
+        getBody.prompt === "Pro-tier custom prompt for testing.",
+        `GET: expected prompt to match`
+      );
+    } finally {
+      // Teardown: restore free tier and clear prompt
+      await updateTestAccount({ plan_tier: "free", extraction_prompt: null });
+    }
+  },
+});
+
 async function main() {
   const totalStart = performance.now();
   let passed = 0;
   let failed = 0;
 
-  console.log(`\n▶ Running WithMemory E2E tests`);
-  console.log(`  Base URL: ${BASE_URL}`);
-  console.log(`  User ID:  ${userId}\n`);
+  // Resolve account ID for plan enforcement tests
+  testAccountId = await resolveTestAccountId();
 
-  for (const test of tests) {
-    const start = performance.now();
-    try {
-      await test.fn();
-      const ms = Math.round(performance.now() - start);
-      console.log(`✓ ${test.name} (${ms}ms)`);
-      passed++;
-    } catch (err) {
-      const ms = Math.round(performance.now() - start);
-      console.log(`✗ ${test.name} (${ms}ms)`);
-      console.log(`  ${err instanceof Error ? err.message : err}\n`);
-      failed++;
-      break;
+  console.log(`\n▶ Running WithMemory E2E tests`);
+  console.log(`  Base URL:    ${BASE_URL}`);
+  console.log(`  User ID:     ${userId}`);
+  console.log(`  Account ID:  ${testAccountId}\n`);
+
+  try {
+    for (const test of tests) {
+      const start = performance.now();
+      try {
+        await test.fn();
+        const ms = Math.round(performance.now() - start);
+        console.log(`✓ ${test.name} (${ms}ms)`);
+        passed++;
+      } catch (err) {
+        const ms = Math.round(performance.now() - start);
+        console.log(`✗ ${test.name} (${ms}ms)`);
+        console.log(`  ${err instanceof Error ? err.message : err}\n`);
+        failed++;
+        break;
+      }
     }
+  } finally {
+    // Guaranteed cleanup: account back to known-good state regardless of
+    // test failures, uncaught exceptions, or runner breaking out mid-loop.
+    // Prevents stale plan_tier='pro' from cascading into subsequent runs.
+    try {
+      await updateTestAccount({ plan_tier: "free", extraction_prompt: null, memory_limit: 1000 });
+    } catch (e) {
+      console.error("WARNING: final account cleanup failed:", e);
+    }
+    await testDb.end();
   }
 
   const totalMs = ((performance.now() - totalStart) / 1000).toFixed(1);

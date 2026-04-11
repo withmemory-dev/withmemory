@@ -9,6 +9,7 @@ import { USER_ID_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
 import { runExtraction, parseMaxInputBytes } from "../../lib/extraction";
 import { classifyFact, type ExistingMemory } from "../../lib/dedup";
 import EXTRACTION_PROMPT from "../../lib/extraction-prompt.txt";
+import { checkMemoryQuota, PlanEnforcementError } from "../../lib/plan-enforcement";
 
 const { wmExchanges, wmMemories } = schema;
 
@@ -43,6 +44,20 @@ export function commitRoute() {
         },
         400
       );
+    }
+
+    // Quota check: reject before any DB write or LLM call.
+    // commit() accepts a single exchange, not a batch — extraction may produce
+    // 0-N memories, but we don't know the count until after the LLM runs.
+    // Pre-check with 1: "can the account accept at least one more memory?"
+    // If not, reject the entire commit. Individual inserts inside waitUntil
+    // could still exceed quota mid-extraction (same race condition documented
+    // in plan-enforcement.ts).
+    try {
+      await checkMemoryQuota(db, account, 1);
+    } catch (e) {
+      if (e instanceof PlanEnforcementError) return c.json(e.toResponseBody(), 403);
+      throw e;
     }
 
     // Idempotency check

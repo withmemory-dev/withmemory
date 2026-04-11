@@ -6,6 +6,7 @@ import { USER_ID_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { ensureEndUser } from "../../lib/end-users";
 import { embedTexts } from "../../lib/embeddings";
+import { checkMemoryQuota, PlanEnforcementError } from "../../lib/plan-enforcement";
 
 const { wmMemories } = schema;
 
@@ -24,6 +25,14 @@ export function setRoute() {
     const db = c.get("db");
     const account = c.get("account");
     const { userId, key, value } = c.req.valid("json");
+
+    // Quota check: reject before any DB write or embedding API call
+    try {
+      await checkMemoryQuota(db, account, 1);
+    } catch (e) {
+      if (e instanceof PlanEnforcementError) return c.json(e.toResponseBody(), 403);
+      throw e;
+    }
 
     const endUser = await ensureEndUser(db, account.id, userId);
 

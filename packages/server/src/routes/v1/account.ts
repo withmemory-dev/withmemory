@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import * as schema from "../../db/schema";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { zodErrorHook } from "../../lib/validation";
+import { requirePlan, PlanEnforcementError } from "../../lib/plan-enforcement";
 
 const { wmAccounts } = schema;
 
@@ -25,6 +26,14 @@ export function accountRoute() {
     const db = c.get("db");
     const account = c.get("account");
     const { prompt } = c.req.valid("json");
+
+    // Plan gate: custom extraction prompts require pro tier or above
+    try {
+      requirePlan(account, ["pro", "team", "enterprise"]);
+    } catch (e) {
+      if (e instanceof PlanEnforcementError) return c.json(e.toResponseBody(), 403);
+      throw e;
+    }
 
     await db
       .update(wmAccounts)
