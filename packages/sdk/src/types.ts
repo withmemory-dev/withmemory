@@ -25,6 +25,19 @@ export interface GetResponse {
 export interface RecallResponse {
   promptBlock: string;
   memories: Memory[];
+  ranking: {
+    strategy: "semantic" | "recency_importance" | "user_not_found";
+    reason?: "embedding_unavailable";
+  };
+}
+
+export interface ExtractionPromptResponse {
+  prompt: string | null;
+  source: "custom" | "default";
+}
+
+export interface ResetExtractionPromptResponse {
+  reset: boolean;
 }
 
 export interface RemoveResponse {

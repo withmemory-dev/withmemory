@@ -86,7 +86,7 @@ The `ranking` field describes how the returned memories were ordered:
 - **`"recency_importance"`** — the query embedding could not be generated (typically because the embeddings API was unavailable), so memories were ranked by recency and importance only, with source tier still applied. The `reason` field is set to `"embedding_unavailable"` in this case. Clients can choose to retry, degrade, or proceed with the returned memories as-is.
 - **`"user_not_found"`** — the requested `userId` does not exist under the authenticated account, so there were no memories to rank. The `memories` array is empty. The `promptBlock` may still contain registered defaults if any were provided in the request. This is not an error; it's a normal response for first-contact with a new end user.
 
-The `ranking` field is additive and backward-compatible. SDK clients that don't know about it will continue to work unchanged. The SDK's `RecallResponse` type does not yet expose `ranking` — that's a followup in a subsequent SDK commit.
+The `ranking` field is additive and backward-compatible. SDK clients that don't know about it will continue to work unchanged. The SDK's `RecallResponse` type now includes the `ranking` field.
 
 ### SetResponse
 
@@ -123,6 +123,25 @@ interface HealthResponse {
 
 `GET /v1/health` is authenticated — it sits behind the same Bearer token middleware as all other `/v1/*` routes. This means `health()` validates both service availability and API key validity. Unauthenticated health checks are available at `/health` and `/health/db` on the root app.
 
+### ExtractionPromptResponse
+
+```ts
+interface ExtractionPromptResponse {
+  prompt: string | null;    // the custom prompt text, or null if using default
+  source: "custom" | "default";
+}
+```
+
+Returned by both `setExtractionPrompt()` and `getExtractionPrompt()`. When `source` is `"custom"`, `prompt` contains the account's custom extraction prompt. When `source` is `"default"`, `prompt` is `null` and the server uses the bundled extraction prompt.
+
+### ResetExtractionPromptResponse
+
+```ts
+interface ResetExtractionPromptResponse {
+  reset: boolean;           // always true
+}
+```
+
 ## SDK methods
 
 | Method                              | HTTP                          | Returns              | Throws on error? |
@@ -137,6 +156,9 @@ interface HealthResponse {
 | `getUserMemories(userId)`          | `POST /v1/memories`           | `Memory[]`           | Yes               |
 | `deleteMemory(memoryId)`           | `DELETE /v1/memories/:id`     | `RemoveResponse`     | Yes               |
 | `health()`                         | `GET /v1/health`              | `HealthResponse`     | Yes               |
+| `setExtractionPrompt(prompt)`     | `POST /v1/account/extraction-prompt` | `ExtractionPromptResponse` | Yes          |
+| `getExtractionPrompt()`           | `GET /v1/account/extraction-prompt`  | `ExtractionPromptResponse` | Yes          |
+| `resetExtractionPrompt()`         | `DELETE /v1/account/extraction-prompt` | `ResetExtractionPromptResponse` | Yes   |
 
 **`register(defaults)`** stores defaults on the client instance. Defaults are forwarded in the `recall()` request body as a `defaults` field and appear in the `promptBlock` as tier 4 fallback (after explicit, extracted, and summary memories). Defaults do NOT appear in the `memories` array — they are prompt-block-only.
 
@@ -145,3 +167,5 @@ interface HealthResponse {
 **`recall()` accepts optional `defaults`** — a `Record<string, string>` of key-value pairs to include in the prompt block when real memories don't fill the budget. Per-call defaults merge with (and override) any defaults set via `register()`. The `memories` array in the response reflects real database rows only.
 
 **`getUserMemories()`** returns all memories for a user, wrapped in `{ memories: Memory[] }`. **`deleteMemory()`** deletes a memory by ID with account-level ownership check.
+
+**`setExtractionPrompt(prompt)`** sets a custom extraction prompt for the authenticated account. The prompt must be 1–32,768 characters after trimming whitespace. The custom prompt is used instead of the bundled default when `commit()` runs extraction. **`getExtractionPrompt()`** reads the current prompt state. **`resetExtractionPrompt()`** clears the custom prompt, reverting to the bundled default.

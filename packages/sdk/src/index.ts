@@ -11,6 +11,8 @@ export type {
   RecallOptions,
   CommitOptions,
   RegisterDefaults,
+  ExtractionPromptResponse,
+  ResetExtractionPromptResponse,
 } from "./types";
 
 import { WithMemoryClient } from "./client";
@@ -75,5 +77,17 @@ export const memory = {
 
   health() {
     return getInstance().health();
+  },
+
+  setExtractionPrompt(prompt: string) {
+    return getInstance().setExtractionPrompt(prompt);
+  },
+
+  getExtractionPrompt() {
+    return getInstance().getExtractionPrompt();
+  },
+
+  resetExtractionPrompt() {
+    return getInstance().resetExtractionPrompt();
   },
 };

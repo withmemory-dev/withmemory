@@ -10,6 +10,8 @@ import type {
   RecallOptions,
   CommitOptions,
   RegisterDefaults,
+  ExtractionPromptResponse,
+  ResetExtractionPromptResponse,
 } from "./types";
 
 const DEFAULT_BASE_URL = "https://api.withmemory.dev";
@@ -76,6 +78,28 @@ export class WithMemoryClient {
 
   async health(): Promise<HealthResponse> {
     return this.request<HealthResponse>("GET", "/v1/health");
+  }
+
+  async setExtractionPrompt(prompt: string): Promise<ExtractionPromptResponse> {
+    return this.request<ExtractionPromptResponse>(
+      "POST",
+      "/v1/account/extraction-prompt",
+      { prompt }
+    );
+  }
+
+  async getExtractionPrompt(): Promise<ExtractionPromptResponse> {
+    return this.request<ExtractionPromptResponse>(
+      "GET",
+      "/v1/account/extraction-prompt"
+    );
+  }
+
+  async resetExtractionPrompt(): Promise<ResetExtractionPromptResponse> {
+    return this.request<ResetExtractionPromptResponse>(
+      "DELETE",
+      "/v1/account/extraction-prompt"
+    );
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
