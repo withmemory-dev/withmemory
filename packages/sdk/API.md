@@ -166,6 +166,6 @@ interface ResetExtractionPromptResponse {
 
 **`recall()` accepts optional `defaults`** — a `Record<string, string>` of key-value pairs to include in the prompt block when real memories don't fill the budget. Per-call defaults merge with (and override) any defaults set via `register()`. The `memories` array in the response reflects real database rows only.
 
-**`getUserMemories()`** returns all memories for a user, wrapped in `{ memories: Memory[] }`. **`deleteMemory()`** deletes a memory by ID with account-level ownership check.
+**`getUserMemories()`** returns all non-superseded memories for a user as a bare `Memory[]` array (not wrapped in an envelope). Returns `[]` if the user does not exist. **`deleteMemory()`** deletes a memory by ID with account-level ownership check.
 
 **`setExtractionPrompt(prompt)`** sets a custom extraction prompt for the authenticated account. The prompt must be 1–32,768 characters after trimming whitespace. The custom prompt is used instead of the bundled default when `commit()` runs extraction. **`getExtractionPrompt()`** reads the current prompt state. **`resetExtractionPrompt()`** clears the custom prompt, reverting to the bundled default.
