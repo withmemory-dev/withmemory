@@ -4,6 +4,7 @@ import { zValidator } from "@hono/zod-validator";
 import { eq } from "drizzle-orm";
 import * as schema from "../../db/schema";
 import type { WorkerEnv, AppVariables } from "../../types";
+import { zodErrorHook } from "../../lib/validation";
 
 const { wmAccounts } = schema;
 
@@ -14,20 +15,7 @@ const SetPromptSchema = z.object({
     .pipe(z.string().min(1).max(32768)),
 });
 
-const setPromptValidator = zValidator("json", SetPromptSchema, (result, c) => {
-  if (!result.success) {
-    return c.json(
-      {
-        error: {
-          code: "invalid_request",
-          message: "Invalid request body",
-          details: result.error.issues,
-        },
-      },
-      400
-    );
-  }
-});
+const setPromptValidator = zValidator("json", SetPromptSchema, zodErrorHook);
 
 export function accountRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();

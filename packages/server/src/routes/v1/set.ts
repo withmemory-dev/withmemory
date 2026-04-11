@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import * as schema from "../../db/schema";
-import { USER_ID_MAX_LENGTH } from "../../lib/validation";
+import { USER_ID_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { ensureEndUser } from "../../lib/end-users";
 import { embedTexts } from "../../lib/embeddings";
@@ -15,20 +15,7 @@ const SetRequestSchema = z.object({
   value: z.string().min(1).max(4096),
 });
 
-const validator = zValidator("json", SetRequestSchema, (result, c) => {
-  if (!result.success) {
-    return c.json(
-      {
-        error: {
-          code: "invalid_request",
-          message: "Invalid request body",
-          details: result.error.issues,
-        },
-      },
-      400
-    );
-  }
-});
+const validator = zValidator("json", SetRequestSchema, zodErrorHook);
 
 export function setRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();

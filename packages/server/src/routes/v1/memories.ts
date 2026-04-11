@@ -3,7 +3,7 @@ import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { eq, and, desc, isNull } from "drizzle-orm";
 import * as schema from "../../db/schema";
-import { USER_ID_MAX_LENGTH } from "../../lib/validation";
+import { USER_ID_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
 import type { WorkerEnv, AppVariables } from "../../types";
 
 const { wmEndUsers, wmMemories } = schema;
@@ -12,20 +12,7 @@ const ListMemoriesSchema = z.object({
   userId: z.string().min(1).max(USER_ID_MAX_LENGTH),
 });
 
-const listValidator = zValidator("json", ListMemoriesSchema, (result, c) => {
-  if (!result.success) {
-    return c.json(
-      {
-        error: {
-          code: "invalid_request",
-          message: "Invalid request body",
-          details: result.error.issues,
-        },
-      },
-      400
-    );
-  }
-});
+const listValidator = zValidator("json", ListMemoriesSchema, zodErrorHook);
 
 // UUID v4 regex for path param validation
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

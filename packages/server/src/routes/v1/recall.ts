@@ -4,7 +4,7 @@ import { zValidator } from "@hono/zod-validator";
 import { eq, and, sql } from "drizzle-orm";
 import { isNull } from "drizzle-orm/sql/expressions/conditions";
 import * as schema from "../../db/schema";
-import { USER_ID_MAX_LENGTH } from "../../lib/validation";
+import { USER_ID_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { embedQuery, EMBEDDING_DIMENSIONS } from "../../lib/embeddings";
 import {
@@ -27,20 +27,7 @@ const RecallRequestSchema = z.object({
   defaults: z.record(z.string(), z.string()).optional(),
 });
 
-const validator = zValidator("json", RecallRequestSchema, (result, c) => {
-  if (!result.success) {
-    return c.json(
-      {
-        error: {
-          code: "invalid_request",
-          message: "Invalid request body",
-          details: result.error.issues,
-        },
-      },
-      400
-    );
-  }
-});
+const validator = zValidator("json", RecallRequestSchema, zodErrorHook);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fallback ranking weights for the embedding-unavailable path.

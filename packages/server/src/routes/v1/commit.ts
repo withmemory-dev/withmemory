@@ -5,7 +5,7 @@ import { eq, and, isNull } from "drizzle-orm";
 import * as schema from "../../db/schema";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { ensureEndUser } from "../../lib/end-users";
-import { USER_ID_MAX_LENGTH } from "../../lib/validation";
+import { USER_ID_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
 import { runExtraction, parseMaxInputBytes } from "../../lib/extraction";
 import { classifyFact, type ExistingMemory } from "../../lib/dedup";
 import EXTRACTION_PROMPT from "../../lib/extraction-prompt.txt";
@@ -18,20 +18,7 @@ const CommitRequestSchema = z.object({
   output: z.string().min(1),
 });
 
-const validator = zValidator("json", CommitRequestSchema, (result, c) => {
-  if (!result.success) {
-    return c.json(
-      {
-        error: {
-          code: "invalid_request",
-          message: "Invalid request body",
-          details: result.error.issues,
-        },
-      },
-      400
-    );
-  }
-});
+const validator = zValidator("json", CommitRequestSchema, zodErrorHook);
 
 export function commitRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
