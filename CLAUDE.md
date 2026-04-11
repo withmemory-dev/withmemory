@@ -89,7 +89,8 @@ packages/server/
 │   │   ├── remove.ts         # POST /v1/remove
 │   │   ├── commit.ts         # POST /v1/commit (extraction pipeline)
 │   │   ├── memories.ts       # POST /v1/memories + DELETE /v1/memories/:id
-│   │   └── health.ts         # GET /v1/health
+│   │   ├── health.ts         # GET /v1/health
+│   │   └── account.ts        # POST/GET/DELETE /v1/account/extraction-prompt
 │   ├── middleware/
 │   │   └── auth.ts           # API key auth (SHA-256, Bearer token)
 │   └── lib/
@@ -169,9 +170,9 @@ The server API, TypeScript SDK, and extraction pipeline are functional. All eigh
 
 What exists:
 - Monorepo structure with pnpm workspaces
-- `packages/server` with Hono, Drizzle, API key auth middleware, and eight live `/v1/*` routes (`set`, `get`, `recall`, `remove`, `health`, `commit`, `memories`, `memories/:id`). A catch-all 404 handler on the v1 sub-app returns the standard `{ error: { code, message } }` envelope for unknown routes.
-- `packages/sdk` (`@withmemory/sdk`) — TypeScript SDK with dual ESM/CJS output via tsup, zero runtime dependencies. Exports a `memory` singleton and a `createClient()` factory. All 10 methods are live. `register()` stores defaults and forwards them to `recall()`. See `packages/sdk/API.md` for the canonical contract.
-- Database schema for five tables (`wm_accounts`, `wm_api_keys`, `wm_end_users`, `wm_exchanges`, `wm_memories`) applied to local (production pending)
+- `packages/server` with Hono, Drizzle, API key auth middleware, and eleven live `/v1/*` routes (`set`, `get`, `recall`, `remove`, `health`, `commit`, `memories`, `memories/:id`, `account/extraction-prompt` POST/GET/DELETE). A catch-all 404 handler on the v1 sub-app returns the standard `{ error: { code, message } }` envelope for unknown routes.
+- `packages/sdk` (`@withmemory/sdk`) — TypeScript SDK with dual ESM/CJS output via tsup, zero runtime dependencies. Exports a `memory` singleton and a `createClient()` factory. All 13 methods are live (10 original + `setExtractionPrompt`, `getExtractionPrompt`, `resetExtractionPrompt`). `register()` stores defaults and forwards them to `recall()`. See `packages/sdk/API.md` for the canonical contract.
+- Database schema for five tables (`wm_accounts`, `wm_api_keys`, `wm_end_users`, `wm_exchanges`, `wm_memories`) applied to local. `wm_accounts.extraction_prompt` (nullable text) supports customer-configurable extraction prompts.
 - `wm_exchanges` table stores conversation turns from `commit()` with extraction status tracking
 - `wm_memories.exchange_id` FK links extracted memories to their source exchange
 - LLM extraction library (`packages/server/src/lib/extraction.ts`) using direct OpenAI fetch (gpt-4.1-mini for extraction, text-embedding-3-small at 512 dimensions for embeddings)
@@ -180,7 +181,7 @@ What exists:
 - `WorkerEnv` type centralized in `packages/server/src/types.ts` — all env vars declared once
 - `ensureEndUser()` helper shared across `set.ts` and `commit.ts`
 - API key authentication middleware (SHA-256 hash, Bearer token, `last_used_at` updated via `ctx.waitUntil`)
-- E2E test suite: 28 tests covering all eight routes plus auth, validation, idempotency, defaults, and cross-account ownership — passing against both local and production
+- E2E test suite: 33 tests covering all routes plus auth, validation, idempotency, defaults, extraction prompt CRUD, and cross-account ownership — passing against local
 - `packages/eval/` — extraction eval harness with 12 labeled fixtures and quality scoring
 - `examples/vercel-ai-sdk/` — integration example demonstrating set → recall → LLM call → commit against `api.withmemory.dev`
 - Local development environment via Supabase CLI + Docker
