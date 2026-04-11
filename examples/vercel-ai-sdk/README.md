@@ -66,12 +66,6 @@ Done.
 
 If `OPENAI_API_KEY` is not set, step 3 prints a skip message and the example still completes successfully.
 
-## About the commit() warning
+## About the commit() contract
 
-You'll see a warning line in the output like:
-
-```
-[@withmemory/sdk] commit() failed silently: Route not found
-```
-
-This is expected for now. `commit()` posts to `/v1/commit`, which lands in Session 3 along with the extraction pipeline. The warning demonstrates the fire-and-forget contract in action: `commit()` never throws, even when the route doesn't exist yet. When the server route ships, the warning disappears and the example keeps working without code changes.
+`commit()` is fire-and-forget: it posts to `/v1/commit`, returns 202 immediately, and never throws. Extraction runs asynchronously on the server. If the endpoint is unreachable, you'll see a warning like `[@withmemory/sdk] commit() failed silently: ...` — the example still completes successfully.

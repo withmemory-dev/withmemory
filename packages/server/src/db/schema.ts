@@ -133,7 +133,7 @@ export const wmExchanges = pgTable(
       table.endUserId,
       table.createdAt
     ),
-    // Future reconciliation jobs (Session 5+)
+    // Reconciliation jobs filtering by extraction status
     extractionStatusIdx: index("wm_exchanges_extraction_status_idx").on(
       table.extractionStatus
     ),

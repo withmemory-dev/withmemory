@@ -27,7 +27,7 @@ Requires a real OpenAI API key. The extraction prompt itself is read from `packa
 
 ## Fixture format
 
-Fixtures live in `fixtures/v1.jsonl` — one JSON object per line. The dataset contains 50 hand-curated examples across four categories (15 negative, 15 positive, 15 ambiguous, 5 adversarial). v0.1.0 of the extraction prompt was measured against this dataset with the results captured in docs/sessions/session-5-kickoff.md.
+Fixtures live in `fixtures/v1.jsonl` — one JSON object per line. The dataset contains 50 hand-curated examples across four categories (15 negative, 15 positive, 15 ambiguous, 5 adversarial).
 
 Each fixture has this schema:
 

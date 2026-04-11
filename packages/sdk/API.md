@@ -20,7 +20,7 @@ class WithMemoryError extends Error {
 }
 ```
 
-### Error codes — Session 2
+### Error codes
 
 | Code              | Origin      | HTTP Status | When                                                        |
 |-------------------|-------------|-------------|-------------------------------------------------------------|
@@ -36,16 +36,16 @@ class WithMemoryError extends Error {
 
 **SDK-side codes** (`timeout`, `network_error`) are generated client-side when the HTTP request itself fails before the server can respond. These always have `status: 0`.
 
-### Error codes — future sessions
+### Error codes — planned
 
 These codes do not exist yet. They are listed here so nobody adds them prematurely.
 
-| Code                  | Planned Session | Purpose                                              |
-|-----------------------|-----------------|------------------------------------------------------|
-| `rate_limited`        | Session 5       | Account has exceeded its request quota                |
-| `extraction_failed`   | Session 5+      | LLM extraction error surfaced to caller (currently internal-only on the exchange row) |
-| `quota_exceeded`      | Session 5       | Account has exceeded its memory storage quota         |
-| `internal_error`      | Session 4+      | Unclassified server error (5xx)                      |
+| Code                  | Purpose                                              |
+|-----------------------|------------------------------------------------------|
+| `rate_limited`        | Account has exceeded its request quota                |
+| `extraction_failed`   | LLM extraction error surfaced to caller (currently internal-only on the exchange row) |
+| `quota_exceeded`      | Account has exceeded its memory storage quota         |
+| `internal_error`      | Unclassified server error (5xx)                      |
 
 ## Types
 

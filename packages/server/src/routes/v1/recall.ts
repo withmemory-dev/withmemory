@@ -16,7 +16,7 @@ import {
 const { wmEndUsers, wmMemories } = schema;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Request validation — unchanged from the pre-phase-2b shape
+// Request validation
 // ─────────────────────────────────────────────────────────────────────────────
 
 const RecallRequestSchema = z.object({

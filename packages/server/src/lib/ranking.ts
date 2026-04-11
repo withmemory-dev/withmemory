@@ -19,7 +19,7 @@
 //   - Generating the query embedding via OpenAI
 //   - Applying the token-budget trim loop to the returned scored list
 //
-// See PROJECT_BRIEF.md (Session 6) for the design rationale.
+// See CLAUDE.md for the design rationale.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type RankableMemory = {
