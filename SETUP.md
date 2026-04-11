@@ -166,9 +166,27 @@ See `packages/server/src/db/schema.ts` for the full definitions.
 - **Deduplication:** Extracted memories are classified against existing ones — near-duplicates (>=0.92) supersede, conflicts (0.78-0.92) respect explicit > extracted hierarchy, novel facts (<0.78) insert normally.
 - **SDK:** `@withmemory/sdk` at `packages/sdk/` — 13 methods live. `register()` stores defaults and forwards them to `recall()` as tier 4 fallback.
 - **Auth:** API key middleware with SHA-256 hash lookup and `last_used_at` fire-and-forget updates via `ctx.waitUntil`.
-- **E2E tests:** 35 tests passing against both local and production, covering all routes plus auth, validation, idempotency, defaults, SDK register flow, extraction prompt CRUD, and cross-account ownership.
+- **E2E tests:** 41 tests passing against both local and production (40 without `WITHMEMORY_API_KEY_B`, 41 with), covering all routes plus auth, validation, idempotency, defaults, SDK register flow, extraction prompt CRUD, cross-account ownership, and plan enforcement (quota + feature gates).
 - **Eval harness:** `packages/eval/` with 50 extraction fixtures (extraction eval) and 30 recall fixtures (recall eval with ranking quality metrics).
+- **Plan enforcement:** `POST /v1/set` and `POST /v1/commit` check memory quota before write (403 `quota_exceeded`). `POST /v1/account/extraction-prompt` gated to pro/team/enterprise tiers (403 `plan_required`). `monthly_api_call_limit` column exists but enforcement deferred to Session 12.
 - **Example:** `examples/vercel-ai-sdk/` demonstrates the SDK integration pattern with the Vercel AI SDK.
+
+## Test baselines (Session 10, Phase 2)
+
+| Suite | Baseline | Command |
+|---|---|---|
+| Ranking | 37/37 | `npx tsx packages/server/scripts/test-ranking.ts` |
+| Extraction | 50/50 | `pnpm --filter @withmemory/eval eval` |
+| Recall | 24/30 | `pnpm --filter @withmemory/eval test:recall-eval` |
+| E2E (local) | 40/40 (41 with API_KEY_B) | `pnpm test:e2e` |
+| E2E (prod) | 41/41 | `pnpm test:e2e` with prod env vars |
+
+**E2E env vars required:**
+- `WITHMEMORY_API_KEY` — test account API key (required)
+- `WITHMEMORY_API_KEY_B` — second test account key for cross-account test (optional, +1 test)
+- `DATABASE_URL` — direct Postgres connection for plan enforcement test helpers (required since Session 10)
+
+**Extraction and recall evals** require `OPENAI_API_KEY` via `source packages/server/.env.local`.
 
 ## What is NOT yet built
 
