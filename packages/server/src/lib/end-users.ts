@@ -3,6 +3,23 @@ import type { Database } from "../db/client";
 import { wmEndUsers, type WmEndUser } from "../db/schema";
 
 /**
+ * Look up an end user by (accountId, externalId). Returns null if not found.
+ */
+export async function findEndUser(
+  db: Database,
+  accountId: string,
+  externalId: string
+): Promise<WmEndUser | null> {
+  const [endUser] = await db
+    .select()
+    .from(wmEndUsers)
+    .where(and(eq(wmEndUsers.accountId, accountId), eq(wmEndUsers.externalId, externalId)))
+    .limit(1);
+
+  return endUser ?? null;
+}
+
+/**
  * Upsert an end user by (accountId, externalId) and return the row.
  *
  * Uses insert-or-ignore + select, which is one round trip more than

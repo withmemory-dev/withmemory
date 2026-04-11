@@ -4,9 +4,10 @@ import { zValidator } from "@hono/zod-validator";
 import { eq, and, desc, isNull } from "drizzle-orm";
 import * as schema from "../../db/schema";
 import { USER_ID_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
+import { findEndUser } from "../../lib/end-users";
 import type { WorkerEnv, AppVariables } from "../../types";
 
-const { wmEndUsers, wmMemories } = schema;
+const { wmMemories } = schema;
 
 const ListMemoriesSchema = z.object({
   userId: z.string().min(1).max(USER_ID_MAX_LENGTH),
@@ -26,11 +27,7 @@ export function memoriesRoute() {
     const account = c.get("account");
     const { userId } = c.req.valid("json");
 
-    const [endUser] = await db
-      .select()
-      .from(wmEndUsers)
-      .where(and(eq(wmEndUsers.accountId, account.id), eq(wmEndUsers.externalId, userId)))
-      .limit(1);
+    const endUser = await findEndUser(db, account.id, userId);
 
     if (!endUser) {
       return c.json([]);
