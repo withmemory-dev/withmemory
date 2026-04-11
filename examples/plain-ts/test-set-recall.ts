@@ -24,15 +24,17 @@ const testDb = pgPkg(DATABASE_URL, { max: 1, idle_timeout: 5 });
 let testAccountId: string;
 
 async function resolveTestAccountId(): Promise<string> {
-  const keyPrefix = API_KEY!.slice(0, 11);
+  // key_prefix length varies across key generations (8 chars for legacy keys,
+  // 11 chars for wm_test_ keys). Query all rows whose stored prefix matches
+  // the start of the API key, then pick the best match.
   const rows = await testDb`
-    SELECT a.id
+    SELECT a.id, k.key_prefix
     FROM wm_api_keys k
     JOIN wm_accounts a ON k.account_id = a.id
-    WHERE k.key_prefix = ${keyPrefix}
+    WHERE ${API_KEY!} LIKE key_prefix || '%'
     LIMIT 1
   `;
-  if (rows.length === 0) throw new Error(`No account found for key prefix ${keyPrefix}`);
+  if (rows.length === 0) throw new Error(`No account found for API key`);
   return rows[0].id;
 }
 
@@ -664,16 +666,25 @@ const quotaUserId = `e2e_quota_${Date.now()}`;
 tests.push({
   name: "quota_exceeded on /v1/set when memory limit reached",
   fn: async () => {
+    // First, clean up any stale quota test memories from prior failed runs
+    for (let i = 1; i <= 3; i++) {
+      await apiCall("/v1/remove", { userId: quotaUserId, key: `quota_key_${i}` });
+    }
+    await apiCall("/v1/remove", { userId: quotaUserId, key: "quota_key_4" });
+
     // Query current memory count so we can set the limit relative to it.
-    // The account already has memories from earlier tests in this run.
-    const [{ count: existingCount }] = await testDb`
+    // The account already has memories from earlier tests in this run,
+    // and async extraction from commit tests may still be landing.
+    // Use headroom of +10 so the 3 creates succeed even if a few
+    // extraction results land in the gap, then tighten to +3 for the
+    // rejection test.
+    const [{ count: baseCount }] = await testDb`
       SELECT count(*)::int AS count FROM wm_memories
       WHERE account_id = ${testAccountId} AND superseded_by IS NULL
     `;
-    const tightLimit = existingCount + 3;
-    await updateTestAccount({ memory_limit: tightLimit });
+    await updateTestAccount({ memory_limit: baseCount + 10 });
     try {
-      // Create 3 memories — should succeed (fills exactly to limit)
+      // Create 3 memories — should succeed
       for (let i = 1; i <= 3; i++) {
         const res = await apiCall("/v1/set", {
           userId: quotaUserId,
@@ -683,7 +694,15 @@ tests.push({
         assert(res.status === 200, `set ${i}/3: expected 200, got ${res.status}`);
       }
 
-      // 4th should be rejected
+      // Now tighten the limit to exactly the current count so the next
+      // write is rejected. Re-count to account for any async writes.
+      const [{ count: currentCount }] = await testDb`
+        SELECT count(*)::int AS count FROM wm_memories
+        WHERE account_id = ${testAccountId} AND superseded_by IS NULL
+      `;
+      await updateTestAccount({ memory_limit: currentCount });
+
+      // 4th should be rejected — limit is exactly the current count
       const res = await apiCall("/v1/set", {
         userId: quotaUserId,
         key: "quota_key_4",
@@ -695,12 +714,12 @@ tests.push({
         `expected error.code "quota_exceeded", got "${res.body.error?.code}"`
       );
       assert(
-        res.body.error?.details?.current === tightLimit,
-        `expected details.current === ${tightLimit}, got ${res.body.error?.details?.current}`
+        res.body.error?.details?.current === currentCount,
+        `expected details.current === ${currentCount}, got ${res.body.error?.details?.current}`
       );
       assert(
-        res.body.error?.details?.limit === tightLimit,
-        `expected details.limit === ${tightLimit}, got ${res.body.error?.details?.limit}`
+        res.body.error?.details?.limit === currentCount,
+        `expected details.limit === ${currentCount}, got ${res.body.error?.details?.limit}`
       );
     } finally {
       // Teardown: restore limit and clean up memories via remove
