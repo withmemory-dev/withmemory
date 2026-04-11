@@ -1,0 +1,11 @@
+# Followups
+
+Tracked issues and deferred work items that need investigation in future sessions.
+
+---
+
+## Drizzle Kit prod pipeline unreliable
+
+**Logged:** Session 10, Phase 1 (April 2026)
+
+Drizzle Kit pooler pipeline unreliable. Session pooler URL (PROD_MIGRATION_URL) works for raw psql but drizzle-kit migrate silently exits code 1 without applying migration and without a clear error message. Workaround used in Session 10 Phase 1: apply raw SQL via `psql -f infra/migrations/0004_small_scream.sql` and manually insert the `__drizzle_migrations` tracking row with the correct hash and current timestamp. Investigate in a dedicated session: (a) confirm env var precedence between invocation-time DATABASE_URL override and .env.local fallback — Drizzle Kit may be silently hitting localhost instead of pooler; (b) rule out the bogus `__drizzle_migrations` row id=4 (hash `6fb1b7a9...`, `created_at` 1744329600000 = Apr 2025) as a potential source of confusion; (c) test session pooler vs transaction pooler vs IPv4 add-on. Until fixed, every prod migration requires the manual workaround. Blocks full CI-driven migration pipeline.
