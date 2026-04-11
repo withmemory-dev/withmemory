@@ -40,6 +40,7 @@ const vector = customType<{
 export const wmAccounts = pgTable("wm_accounts", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
+  extractionPrompt: text("extraction_prompt"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

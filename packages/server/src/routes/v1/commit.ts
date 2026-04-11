@@ -77,6 +77,12 @@ export function commitRoute() {
 
     const endUser = await ensureEndUser(db, account.id, userId);
 
+    // Resolve extraction prompt: custom per-account prompt wins over the bundled default
+    const extractionPrompt = account.extractionPrompt ?? EXTRACTION_PROMPT;
+    const promptVersion = account.extractionPrompt
+      ? "custom"
+      : c.env.EXTRACTION_PROMPT_VERSION || null;
+
     // Insert exchange row
     const [exchange] = await db
       .insert(wmExchanges)
@@ -86,7 +92,7 @@ export function commitRoute() {
         input,
         output,
         idempotencyKey,
-        promptVersion: c.env.EXTRACTION_PROMPT_VERSION || null,
+        promptVersion,
         extractionStatus: "pending",
       })
       .returning();
@@ -113,8 +119,8 @@ export function commitRoute() {
 
           const result = await runExtraction({
             openaiApiKey: apiKey,
-            prompt: EXTRACTION_PROMPT,
-            promptVersion: c.env.EXTRACTION_PROMPT_VERSION || "unknown",
+            prompt: extractionPrompt,
+            promptVersion: promptVersion || "unknown",
             input: { input, output },
           });
 

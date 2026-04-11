@@ -1,0 +1,1 @@
+ALTER TABLE "wm_accounts" ADD COLUMN "extraction_prompt" text;
