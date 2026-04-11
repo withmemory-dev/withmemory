@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import * as schema from "../../db/schema";
 import type { WorkerEnv, AppVariables } from "../../types";
 
@@ -52,7 +52,8 @@ export function getRoute() {
         and(
           eq(wmMemories.accountId, account.id),
           eq(wmMemories.endUserId, endUser.id),
-          eq(wmMemories.key, key)
+          eq(wmMemories.key, key),
+          isNull(wmMemories.supersededBy)
         )
       )
       .limit(1);
