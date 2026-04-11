@@ -4,9 +4,11 @@ import {
   uuid,
   text,
   timestamp,
+  integer,
   real,
   unique,
   index,
+  check,
   customType,
 } from "drizzle-orm/pg-core";
 
@@ -37,10 +39,24 @@ const vector = customType<{
 // wm_accounts — your customers (developers using WithMemory)
 // ─────────────────────────────────────────────────────────────────────────────
 
+export const planTierValues = ["free", "basic", "pro", "team", "enterprise"] as const;
+export type PlanTier = (typeof planTierValues)[number];
+
+export const planStatusValues = ["active", "past_due", "canceled", "trialing"] as const;
+export type PlanStatus = (typeof planStatusValues)[number];
+
 export const wmAccounts = pgTable("wm_accounts", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
   extractionPrompt: text("extraction_prompt"),
+  planTier: text("plan_tier").$type<PlanTier>().notNull().default("free"),
+  planStatus: text("plan_status").$type<PlanStatus>().notNull().default("active"),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  memoryLimit: integer("memory_limit").notNull().default(1000),
+  // Column exists for Session 12 Stripe integration. Not enforced as of Session 10.
+  monthlyApiCallLimit: integer("monthly_api_call_limit").notNull().default(10000),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -68,6 +84,50 @@ export const wmApiKeys = pgTable(
   (table) => ({
     keyHashIdx: index("wm_api_keys_key_hash_idx").on(table.keyHash),
     accountIdIdx: index("wm_api_keys_account_id_idx").on(table.accountId),
+  })
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// wm_users — dashboard users, mirrored from auth.users via trigger
+// The id column mirrors auth.users(id). Cross-schema FK not expressible in
+// Drizzle — enforced via trigger on Supabase, CLI seed on self-hosted.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const wmUsers = pgTable("wm_users", {
+  id: uuid("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  displayName: text("display_name"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// wm_account_members — join table linking users to accounts
+// Roles: 'owner' (full control), 'admin' (manage keys/members), 'member' (read)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const memberRoleValues = ["owner", "admin", "member"] as const;
+export type MemberRole = (typeof memberRoleValues)[number];
+
+export const wmAccountMembers = pgTable(
+  "wm_account_members",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => wmAccounts.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => wmUsers.id, { onDelete: "cascade" }),
+    role: text("role").$type<MemberRole>().notNull(),
+    invitedBy: uuid("invited_by").references(() => wmUsers.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    uniqueAccountUser: unique().on(table.accountId, table.userId),
+    accountIdx: index("wm_account_members_account_idx").on(table.accountId),
+    userIdx: index("wm_account_members_user_idx").on(table.userId),
+    roleCheck: check("wm_account_members_role_check", sql`role IN ('owner', 'admin', 'member')`),
   })
 );
 
@@ -214,3 +274,9 @@ export type NewWmExchange = typeof wmExchanges.$inferInsert;
 
 export type WmMemory = typeof wmMemories.$inferSelect;
 export type NewWmMemory = typeof wmMemories.$inferInsert;
+
+export type WmUser = typeof wmUsers.$inferSelect;
+export type NewWmUser = typeof wmUsers.$inferInsert;
+
+export type WmAccountMember = typeof wmAccountMembers.$inferSelect;
+export type NewWmAccountMember = typeof wmAccountMembers.$inferInsert;
