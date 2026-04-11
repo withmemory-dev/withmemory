@@ -441,7 +441,94 @@ tests.push({
   },
 });
 
-// ── Cross-account ownership test (requires WITHMEMORY_API_KEY_B) ─────────────
+// ── /v1/account/extraction-prompt tests ─────��────────────────────────────────
+
+tests.push({
+  name: "Get extraction prompt returns default when unset",
+  fn: async () => {
+    const response = await fetch(`${BASE_URL}/v1/account/extraction-prompt`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${API_KEY}` },
+    });
+    assert(response.status === 200, `expected 200, got ${response.status}`);
+    const body = (await response.json()) as any;
+    assert(body.source === "default", `expected source "default", got "${body.source}"`);
+    assert(body.prompt === null, `expected null prompt, got "${body.prompt}"`);
+  },
+});
+
+tests.push({
+  name: "Set custom extraction prompt",
+  fn: async () => {
+    const res = await apiCall("/v1/account/extraction-prompt", {
+      prompt: "You are a custom extraction prompt for testing.",
+    });
+    assert(res.status === 200, `expected 200, got ${res.status}`);
+    assert(res.body.source === "custom", `expected source "custom"`);
+    assert(
+      res.body.prompt === "You are a custom extraction prompt for testing.",
+      `expected prompt to match`
+    );
+  },
+});
+
+tests.push({
+  name: "Get extraction prompt returns custom after set",
+  fn: async () => {
+    const response = await fetch(`${BASE_URL}/v1/account/extraction-prompt`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${API_KEY}` },
+    });
+    assert(response.status === 200, `expected 200, got ${response.status}`);
+    const body = (await response.json()) as any;
+    assert(body.source === "custom", `expected source "custom"`);
+    assert(
+      body.prompt === "You are a custom extraction prompt for testing.",
+      `expected custom prompt text`
+    );
+  },
+});
+
+tests.push({
+  name: "Reset extraction prompt returns reset: true",
+  fn: async () => {
+    const response = await fetch(`${BASE_URL}/v1/account/extraction-prompt`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${API_KEY}` },
+    });
+    assert(response.status === 200, `expected 200, got ${response.status}`);
+    const body = (await response.json()) as any;
+    assert(body.reset === true, `expected reset: true, got ${body.reset}`);
+  },
+});
+
+tests.push({
+  name: "Get extraction prompt returns default after reset",
+  fn: async () => {
+    const response = await fetch(`${BASE_URL}/v1/account/extraction-prompt`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${API_KEY}` },
+    });
+    assert(response.status === 200, `expected 200, got ${response.status}`);
+    const body = (await response.json()) as any;
+    assert(body.source === "default", `expected source "default" after reset`);
+    assert(body.prompt === null, `expected null prompt after reset`);
+  },
+});
+
+tests.push({
+  name: "Set extraction prompt validation rejects empty string",
+  fn: async () => {
+    const res = await apiCall("/v1/account/extraction-prompt", { prompt: "   " });
+    assert(res.status === 400, `expected 400, got ${res.status}`);
+    assert(
+      res.body.error?.code === "invalid_request",
+      `expected error.code "invalid_request"`
+    );
+  },
+});
+
+// ─�� Cross-account ownership test (requires WITHMEMORY_API_KEY_B) ────────���────
 
 if (API_KEY_B) {
   tests.push({
