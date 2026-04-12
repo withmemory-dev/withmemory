@@ -66,3 +66,22 @@ export interface CommitOptions {
 export interface RegisterDefaults {
   [key: string]: string;
 }
+
+export interface FetchMemoriesOptions {
+  userId?: string;
+  source?: "explicit" | "extracted" | "all";
+  search?: string;
+  createdAfter?: string;
+  createdBefore?: string;
+  orderBy?: "updatedAt" | "createdAt" | "importance" | "lastRecalledAt";
+  orderDir?: "desc" | "asc";
+  limit?: number;
+  cursor?: string;
+  includeTotal?: boolean;
+}
+
+export interface FetchMemoriesResponse {
+  memories: Memory[];
+  nextCursor: string | null;
+  total?: number;
+}

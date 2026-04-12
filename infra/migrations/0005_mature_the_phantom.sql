@@ -1,0 +1,1 @@
+CREATE INDEX "wm_memories_account_updated_idx" ON "wm_memories" USING btree ("account_id","updated_at","id");

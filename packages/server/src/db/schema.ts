@@ -251,6 +251,13 @@ export const wmMemories = pgTable(
     ),
     // Reverse lookup: which memories came from a given exchange
     exchangeIdIdx: index("wm_memories_exchange_id_idx").on(table.exchangeId),
+    // Account-wide listing sorted by updated_at (default sort for /v1/memories/list).
+    // Postgres can scan this btree backward for DESC ordering.
+    accountUpdatedIdx: index("wm_memories_account_updated_idx").on(
+      table.accountId,
+      table.updatedAt,
+      table.id
+    ),
     // pgvector HNSW index for similarity search — created via raw SQL in migration
     // because Drizzle doesn't generate HNSW index syntax automatically
   })

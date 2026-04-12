@@ -1,7 +1,6 @@
 import { WithMemoryError } from "./errors";
 import type {
   WithMemoryConfig,
-  Memory,
   SetResponse,
   GetResponse,
   RecallResponse,
@@ -12,6 +11,8 @@ import type {
   RegisterDefaults,
   ExtractionPromptResponse,
   ResetExtractionPromptResponse,
+  FetchMemoriesOptions,
+  FetchMemoriesResponse,
 } from "./types";
 
 const DEFAULT_BASE_URL = "https://api.withmemory.dev";
@@ -68,8 +69,8 @@ export class WithMemoryClient {
     }
   }
 
-  async getUserMemories(userId: string): Promise<Memory[]> {
-    return this.request<Memory[]>("POST", "/v1/memories", { userId });
+  async fetchMemories(options?: FetchMemoriesOptions): Promise<FetchMemoriesResponse> {
+    return this.request<FetchMemoriesResponse>("POST", "/v1/memories/list", options ?? {});
   }
 
   async deleteMemory(memoryId: string): Promise<RemoveResponse> {

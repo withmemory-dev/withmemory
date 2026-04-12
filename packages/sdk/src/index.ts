@@ -13,10 +13,12 @@ export type {
   RegisterDefaults,
   ExtractionPromptResponse,
   ResetExtractionPromptResponse,
+  FetchMemoriesOptions,
+  FetchMemoriesResponse,
 } from "./types";
 
 import { WithMemoryClient } from "./client";
-import type { WithMemoryConfig, RegisterDefaults, RecallOptions, CommitOptions } from "./types";
+import type { WithMemoryConfig, RegisterDefaults, RecallOptions, CommitOptions, FetchMemoriesOptions } from "./types";
 
 // ─── Default singleton (UserDefaults pattern) ────────────────────────────────
 // Usage:
@@ -67,8 +69,8 @@ export const memory = {
     return getInstance().commit(options);
   },
 
-  getUserMemories(userId: string) {
-    return getInstance().getUserMemories(userId);
+  fetchMemories(options?: FetchMemoriesOptions) {
+    return getInstance().fetchMemories(options);
   },
 
   deleteMemory(memoryId: string) {
