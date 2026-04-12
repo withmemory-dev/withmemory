@@ -2,6 +2,10 @@
 
 This file is the canonical in-repo reference for the SDK's public surface. It documents the types, error codes, and response shapes that the SDK and server must agree on. When the SDK types and this file disagree, this file wins.
 
+## Changelog
+
+- **2026-04-12:** Replaced `POST /v1/memories` with `POST /v1/memories/list` — added filtering, search, sort, cursor pagination, opt-in totals. SDK method `getUserMemories()` replaced by `fetchMemories()`. **BREAKING CHANGE.**
+
 ## Route conventions
 
 All `/v1/*` routes are POST with JSON bodies, except DELETE on resources addressed by primary key (e.g., `DELETE /v1/memories/:id`) and GET for read-only status endpoints (e.g., `GET /v1/health`). The `userId` field is a filter within the account's data, not an addressable resource — it lives in the request body, never in the URL path or query string.
@@ -143,6 +147,35 @@ interface ResetExtractionPromptResponse {
 }
 ```
 
+### FetchMemoriesOptions
+
+```ts
+interface FetchMemoriesOptions {
+  userId?: string;           // Filter by end user. Omit for account-wide listing.
+  source?: "explicit" | "extracted" | "all";  // Default: "all"
+  search?: string;           // Case-insensitive substring match on key and value (1–500 chars)
+  createdAfter?: string;     // ISO 8601 datetime filter (exclusive)
+  createdBefore?: string;    // ISO 8601 datetime filter (exclusive)
+  orderBy?: "updatedAt" | "createdAt" | "importance" | "lastRecalledAt";  // Default: "updatedAt"
+  orderDir?: "desc" | "asc"; // Default: "desc"
+  limit?: number;            // 1–200, default 50
+  cursor?: string;           // Opaque cursor from a previous response's nextCursor
+  includeTotal?: boolean;    // Default: false. When true, response includes total count.
+}
+```
+
+### FetchMemoriesResponse
+
+```ts
+interface FetchMemoriesResponse {
+  memories: Memory[];        // Page of memories matching the filters
+  nextCursor: string | null; // Opaque cursor for the next page, or null if no more pages
+  total?: number;            // Only present when includeTotal: true was in the request
+}
+```
+
+**Cursor pagination:** Cursors are opaque strings. Do not parse, construct, or cache them across API versions. Pass the `nextCursor` from one response as the `cursor` in the next request to fetch the next page. When `nextCursor` is `null`, there are no more pages. Cursors use keyset pagination internally, which is O(1) regardless of page depth.
+
 ## SDK methods
 
 | Method                              | HTTP                          | Returns              | Throws on error? |
@@ -154,7 +187,7 @@ interface ResetExtractionPromptResponse {
 | `recall({ userId, input, ... })`   | `POST /v1/recall`             | `RecallResponse`     | Yes               |
 | `remove(userId, key)`              | `POST /v1/remove`             | `RemoveResponse`     | Yes               |
 | `commit({ userId, input, output })`| `POST /v1/commit`             | `void`               | **Never**         |
-| `getUserMemories(userId)`          | `POST /v1/memories`           | `Memory[]`           | Yes               |
+| `fetchMemories(options?)`          | `POST /v1/memories/list`      | `FetchMemoriesResponse` | Yes            |
 | `deleteMemory(memoryId)`           | `DELETE /v1/memories/:id`     | `RemoveResponse`     | Yes               |
 | `health()`                         | `GET /v1/health`              | `HealthResponse`     | Yes               |
 | `setExtractionPrompt(prompt)`     | `POST /v1/account/extraction-prompt` | `ExtractionPromptResponse` | Yes          |
@@ -167,6 +200,6 @@ interface ResetExtractionPromptResponse {
 
 **`recall()` accepts optional `defaults`** — a `Record<string, string>` of key-value pairs to include in the prompt block when real memories don't fill the budget. Per-call defaults merge with (and override) any defaults set via `register()`. The `memories` array in the response reflects real database rows only.
 
-**`getUserMemories()`** returns all non-superseded memories for a user as a bare `Memory[]` array (not wrapped in an envelope). Returns `[]` if the user does not exist. **`deleteMemory()`** deletes a memory by ID with account-level ownership check.
+**`fetchMemories(options?)`** lists non-superseded memories with optional filtering, search, sort, and cursor-based pagination. Supports account-wide listing (omit `userId`) or per-user listing (provide `userId`). Returns a `FetchMemoriesResponse` envelope with `memories`, `nextCursor`, and optionally `total`. See the FetchMemoriesOptions and FetchMemoriesResponse types below. **`deleteMemory()`** deletes a memory by ID with account-level ownership check.
 
 **`setExtractionPrompt(prompt)`** sets a custom extraction prompt for the authenticated account. The prompt must be 1–32,768 characters after trimming whitespace. The custom prompt is used instead of the bundled default when `commit()` runs extraction. **`getExtractionPrompt()`** reads the current prompt state. **`resetExtractionPrompt()`** clears the custom prompt, reverting to the bundled default.

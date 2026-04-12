@@ -393,31 +393,189 @@ tests.push({
   },
 });
 
-// ── /v1/memories tests ───────────────────────────────────────────────────────
+// ── /v1/memories/list tests ──────────────────────────────────────────────────
 
 tests.push({
   name: "List memories for user with memories",
   fn: async () => {
-    const res = await apiCall("/v1/memories", { userId });
+    const res = await apiCall("/v1/memories/list", { userId });
     assert(res.status === 200, `expected 200, got ${res.status}`);
-    assert(Array.isArray(res.body), "expected bare array response");
+    assert(Array.isArray(res.body.memories), "expected memories array in envelope");
+    assert(res.body.nextCursor === null || typeof res.body.nextCursor === "string", "expected nextCursor");
     // User should have at least the 3 memories from set tests (name, role, subscription)
-    assert(res.body.length >= 3, `expected >= 3 memories, got ${res.body.length}`);
+    assert(res.body.memories.length >= 3, `expected >= 3 memories, got ${res.body.memories.length}`);
     // Verify Memory shape
-    const first = res.body[0];
+    const first = res.body.memories[0];
     assert(typeof first.id === "string", "expected id string");
     assert(typeof first.value === "string", "expected value string");
     assert(typeof first.source === "string", "expected source string");
+    assert(typeof first.userId === "string", "expected userId string");
   },
 });
 
 tests.push({
   name: "List memories for nonexistent user returns empty",
   fn: async () => {
-    const res = await apiCall("/v1/memories", { userId: "no_such_user_ever_memories" });
+    const res = await apiCall("/v1/memories/list", { userId: "no_such_user_ever_memories" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
-    assert(Array.isArray(res.body), "expected bare array response");
-    assert(res.body.length === 0, `expected 0 memories`);
+    assert(Array.isArray(res.body.memories), "expected memories array");
+    assert(res.body.memories.length === 0, `expected 0 memories`);
+    assert(res.body.nextCursor === null, "expected null nextCursor");
+  },
+});
+
+tests.push({
+  name: "Account-wide listing returns memories across users",
+  fn: async () => {
+    // No userId filter — should return all memories for the account
+    const res = await apiCall("/v1/memories/list", {});
+    assert(res.status === 200, `expected 200, got ${res.status}`);
+    assert(Array.isArray(res.body.memories), "expected memories array");
+    // Should include at least the 3 memories from the test userId
+    assert(res.body.memories.length >= 3, `expected >= 3 memories, got ${res.body.memories.length}`);
+  },
+});
+
+tests.push({
+  name: "Source filter returns only explicit memories",
+  fn: async () => {
+    const res = await apiCall("/v1/memories/list", { userId, source: "explicit" });
+    assert(res.status === 200, `expected 200, got ${res.status}`);
+    for (const m of res.body.memories) {
+      assert(m.source === "explicit", `expected source "explicit", got "${m.source}"`);
+    }
+  },
+});
+
+tests.push({
+  name: "Search filter matches value content",
+  fn: async () => {
+    // Set a memory with a unique searchable value
+    const searchKey = `search_test_${Date.now()}`;
+    await apiCall("/v1/set", { userId, key: searchKey, value: "xylophone_uniquetoken_987" });
+    const res = await apiCall("/v1/memories/list", { userId, search: "xylophone_uniquetoken" });
+    assert(res.status === 200, `expected 200, got ${res.status}`);
+    assert(res.body.memories.length >= 1, `expected >= 1 search result, got ${res.body.memories.length}`);
+    const found = res.body.memories.some((m: any) => m.value === "xylophone_uniquetoken_987");
+    assert(found, "expected to find memory with the unique search value");
+    // Cleanup
+    await apiCall("/v1/remove", { userId, key: searchKey });
+  },
+});
+
+tests.push({
+  name: "includeTotal returns total count",
+  fn: async () => {
+    const res = await apiCall("/v1/memories/list", { userId, includeTotal: true });
+    assert(res.status === 200, `expected 200, got ${res.status}`);
+    assert(typeof res.body.total === "number", `expected total to be a number, got ${typeof res.body.total}`);
+    assert(res.body.total >= 3, `expected total >= 3, got ${res.body.total}`);
+  },
+});
+
+tests.push({
+  name: "includeTotal omitted when not requested",
+  fn: async () => {
+    const res = await apiCall("/v1/memories/list", { userId });
+    assert(res.status === 200, `expected 200, got ${res.status}`);
+    assert(!("total" in res.body), `expected total to be absent, but it was present`);
+  },
+});
+
+const paginationUserId = `e2e_pagination_${Date.now()}`;
+
+tests.push({
+  name: "Cursor pagination: create test data and paginate",
+  fn: async () => {
+    // Create 8 memories for pagination testing
+    for (let i = 1; i <= 8; i++) {
+      const res = await apiCall("/v1/set", {
+        userId: paginationUserId,
+        key: `page_key_${String(i).padStart(2, "0")}`,
+        value: `page_value_${i}`,
+      });
+      assert(res.status === 200, `set ${i}/8: expected 200, got ${res.status}`);
+    }
+
+    // Page 1: limit 5
+    const page1 = await apiCall("/v1/memories/list", { userId: paginationUserId, limit: 5 });
+    assert(page1.status === 200, `page1: expected 200, got ${page1.status}`);
+    assert(page1.body.memories.length === 5, `page1: expected 5, got ${page1.body.memories.length}`);
+    assert(page1.body.nextCursor !== null, "page1: expected non-null nextCursor");
+
+    // Page 2: use the cursor
+    const page2 = await apiCall("/v1/memories/list", {
+      userId: paginationUserId,
+      limit: 5,
+      cursor: page1.body.nextCursor,
+    });
+    assert(page2.status === 200, `page2: expected 200, got ${page2.status}`);
+    assert(page2.body.memories.length === 3, `page2: expected 3, got ${page2.body.memories.length}`);
+    assert(page2.body.nextCursor === null, "page2: expected null nextCursor (last page)");
+
+    // Verify no duplicates between pages
+    const allIds = [
+      ...page1.body.memories.map((m: any) => m.id),
+      ...page2.body.memories.map((m: any) => m.id),
+    ];
+    const uniqueIds = new Set(allIds);
+    assert(uniqueIds.size === 8, `expected 8 unique IDs, got ${uniqueIds.size}`);
+  },
+});
+
+tests.push({
+  name: "Invalid cursor returns 400",
+  fn: async () => {
+    const res = await apiCall("/v1/memories/list", { userId, cursor: "not-valid-base64-json!" });
+    assert(res.status === 400, `expected 400, got ${res.status}`);
+    assert(
+      res.body.error?.code === "invalid_request",
+      `expected error.code "invalid_request", got "${res.body.error?.code}"`
+    );
+    assert(
+      res.body.error?.message === "Invalid cursor",
+      `expected message "Invalid cursor", got "${res.body.error?.message}"`
+    );
+  },
+});
+
+tests.push({
+  name: "Superseded memories are excluded from list",
+  fn: async () => {
+    // Create a memory, then mark it superseded via direct DB
+    const superKey = `supersede_test_${Date.now()}`;
+    const setRes = await apiCall("/v1/set", { userId, key: superKey, value: "will be superseded" });
+    assert(setRes.status === 200, `set: expected 200, got ${setRes.status}`);
+    const memId = setRes.body.memory.id;
+
+    // Mark as superseded via direct DB (use a dummy UUID)
+    await testDb`
+      UPDATE wm_memories
+      SET superseded_by = '00000000-0000-0000-0000-000000000001'::uuid
+      WHERE id = ${memId}::uuid
+    `;
+
+    // Verify it's NOT in the list
+    const listRes = await apiCall("/v1/memories/list", { userId, search: superKey });
+    assert(listRes.status === 200, `list: expected 200, got ${listRes.status}`);
+    const found = listRes.body.memories.some((m: any) => m.id === memId);
+    assert(!found, "expected superseded memory to NOT appear in list");
+
+    // Cleanup: delete (won't match since superseded, but clean up by unsuperseding first)
+    await testDb`UPDATE wm_memories SET superseded_by = NULL WHERE id = ${memId}::uuid`;
+    await apiCall("/v1/remove", { userId, key: superKey });
+  },
+});
+
+tests.push({
+  name: "Old POST /v1/memories returns 404 (breaking change)",
+  fn: async () => {
+    const res = await apiCall("/v1/memories", { userId });
+    assert(res.status === 404, `expected 404 for old route, got ${res.status}`);
+    assert(
+      res.body.error?.code === "not_found",
+      `expected error.code "not_found", got "${res.body.error?.code}"`
+    );
   },
 });
 
