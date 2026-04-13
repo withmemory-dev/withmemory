@@ -8,6 +8,7 @@ import { healthRoute } from "./health";
 import { commitRoute } from "./commit";
 import { memoriesRoute } from "./memories";
 import { accountRoute } from "./account";
+import { subAccountsRoute } from "./sub-accounts";
 
 export function v1Routes() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
@@ -19,6 +20,7 @@ export function v1Routes() {
   app.route("/", commitRoute());
   app.route("/", memoriesRoute());
   app.route("/", accountRoute());
+  app.route("/", subAccountsRoute());
 
   // Catch-all for unknown /v1/* routes — returns the standard error envelope
   // so the SDK always gets a parseable { error: { code, message } } response.
