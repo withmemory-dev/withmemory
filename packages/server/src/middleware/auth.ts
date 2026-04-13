@@ -1,6 +1,6 @@
 import type { Context, Next } from "hono";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import * as schema from "../db/schema";
 
 const { wmApiKeys, wmAccounts } = schema;
@@ -34,6 +34,7 @@ export function authMiddleware(db: Db) {
     }
     const hashedKey = await sha256Hex(rawKey);
 
+    // Only match non-revoked keys (soft revocation via revoked_at column)
     const result = await db
       .select({
         apiKey: wmApiKeys,
@@ -41,7 +42,7 @@ export function authMiddleware(db: Db) {
       })
       .from(wmApiKeys)
       .innerJoin(wmAccounts, eq(wmApiKeys.accountId, wmAccounts.id))
-      .where(eq(wmApiKeys.keyHash, hashedKey))
+      .where(and(eq(wmApiKeys.keyHash, hashedKey), isNull(wmApiKeys.revokedAt)))
       .limit(1);
 
     if (result.length === 0) {
@@ -52,6 +53,16 @@ export function authMiddleware(db: Db) {
     }
 
     const { apiKey, account } = result[0];
+
+    // Check key expiry — expired keys return a distinct error code so
+    // agents can distinguish "key expired" from "key invalid"
+    if (apiKey.expiresAt && apiKey.expiresAt.getTime() <= Date.now()) {
+      return c.json(
+        { error: { code: "key_expired", message: "API key has expired" } },
+        401
+      );
+    }
+
     c.set("account", account);
     c.set("apiKey", apiKey);
 
