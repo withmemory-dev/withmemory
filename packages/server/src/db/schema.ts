@@ -64,7 +64,7 @@ export const wmAccounts = pgTable(
     // top-level accounts (which use email as their primary identifier).
     name: text("name"),
     // Arbitrary metadata JSON. Used by sub-accounts to store purpose, tags,
-    // or any context the master wants to attach. Max 4KB enforced at the route.
+    // or any context the parent wants to attach. Max 4KB enforced at the route.
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     // Self-referencing FK: sub-accounts point to their parent account.
     // NULL = top-level (parent-eligible) account. ON DELETE CASCADE removes
@@ -101,8 +101,8 @@ export const wmApiKeys = pgTable(
     issuedTo: text("issued_to"),
     // Soft revocation: set to NOW() instead of deleting the row.
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
-    // Self-referencing FK: keys minted via master API point to the minting key.
-    // ON DELETE SET NULL so revoking a master key doesn't cascade to sub-account keys.
+    // Self-referencing FK: keys minted via sub-accounts API point to the minting key.
+    // ON DELETE SET NULL so revoking a parent key doesn't cascade to sub-account keys.
     parentKeyId: uuid("parent_key_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

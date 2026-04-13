@@ -10,14 +10,14 @@ export type { PlanTier };
  * Throws a structured error (matching the server's standard envelope) if
  * the account's memory_limit would be exceeded.
  *
- * For sub-accounts, quota is checked against the master account's limit —
- * memories across the master and all its sub-accounts are summed together.
- * For top-level (master) accounts, the same summing logic applies: the
+ * For sub-accounts, quota is checked against the parent account's limit —
+ * memories across the parent and all its sub-accounts are summed together.
+ * For top-level (parent) accounts, the same summing logic applies: the
  * account's own memories plus all sub-account memories count toward the limit.
  *
  * The `account` parameter comes from auth middleware (already loaded via
  * Drizzle join), so this function issues at most two DB queries (resolve
- * master + count).
+ * parent + count).
  *
  * Race condition note: two concurrent writes can both pass this check and
  * both succeed, transiently exceeding the limit by a small amount. This is
@@ -29,20 +29,20 @@ export async function checkMemoryQuota(
   account: { id: string; memoryLimit: number; planTier: PlanTier; parentAccountId: string | null },
   additionalMemories: number = 1
 ): Promise<void> {
-  // Resolve the master account and its limit
-  let masterId: string;
+  // Resolve the parent account and its limit
+  let parentId: string;
   let limit: number;
   let planTier: PlanTier;
 
   if (account.parentAccountId) {
-    // This is a sub-account — look up the master for its limit
-    const [master] = await db
+    // This is a sub-account — look up the parent for its limit
+    const [parent] = await db
       .select({ id: wmAccounts.id, memoryLimit: wmAccounts.memoryLimit, planTier: wmAccounts.planTier })
       .from(wmAccounts)
       .where(eq(wmAccounts.id, account.parentAccountId))
       .limit(1);
 
-    if (!master) {
+    if (!parent) {
       // Orphaned sub-account — shouldn't happen with FK CASCADE, but be safe
       throw PlanEnforcementError.quotaExceeded({
         current: 0,
@@ -51,16 +51,16 @@ export async function checkMemoryQuota(
       });
     }
 
-    masterId = master.id;
-    limit = master.memoryLimit;
-    planTier = master.planTier as PlanTier;
+    parentId = parent.id;
+    limit = parent.memoryLimit;
+    planTier = parent.planTier as PlanTier;
   } else {
-    masterId = account.id;
+    parentId = account.id;
     limit = account.memoryLimit;
     planTier = account.planTier;
   }
 
-  // Count active memories across master + all sub-accounts
+  // Count active memories across parent + all sub-accounts
   const [countRow] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(wmMemories)
@@ -68,7 +68,7 @@ export async function checkMemoryQuota(
       and(
         sql`${wmMemories.accountId} IN (
           SELECT id FROM wm_accounts
-          WHERE id = ${masterId} OR parent_account_id = ${masterId}
+          WHERE id = ${parentId} OR parent_account_id = ${parentId}
         )`,
         isNull(wmMemories.supersededBy)
       )
