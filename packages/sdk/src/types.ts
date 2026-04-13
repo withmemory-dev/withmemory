@@ -85,3 +85,65 @@ export interface FetchMemoriesResponse {
   nextCursor: string | null;
   total?: number;
 }
+
+// ─── Sub-Accounts ─────────────────────────────────────────────────────────
+
+export interface SubAccount {
+  id: string;
+  parentAccountId: string;
+  name?: string;
+  metadata?: Record<string, unknown>;
+  planTier?: string;
+  memoryLimit?: number;
+  memoryCount?: number;
+  activeKeyCount?: number;
+  createdAt: string;
+}
+
+export interface SubAccountKey {
+  id: string;
+  accountId: string;
+  keyPrefix: string;
+  scopes: string;
+  issuedTo: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+export interface CreateSubAccountOptions {
+  name: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CreateSubAccountKeyOptions {
+  issuedTo: string;
+  scopes?: string;
+  expiresIn?: number;
+}
+
+export interface CreateSubAccountResponse {
+  account: SubAccount;
+}
+
+export interface CreateSubAccountKeyResponse {
+  key: SubAccountKey;
+  rawKey: string;
+}
+
+export interface ListSubAccountsResponse {
+  accounts: SubAccount[];
+  total: number;
+}
+
+export interface GetSubAccountResponse {
+  account: SubAccount;
+}
+
+export interface RevokeSubAccountKeyResponse {
+  revoked: boolean;
+  revokedAt: string;
+}
+
+export interface DeleteSubAccountResponse {
+  deleted: boolean;
+}

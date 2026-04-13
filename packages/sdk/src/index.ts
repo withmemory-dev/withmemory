@@ -15,6 +15,16 @@ export type {
   ResetExtractionPromptResponse,
   FetchMemoriesOptions,
   FetchMemoriesResponse,
+  SubAccount,
+  SubAccountKey,
+  CreateSubAccountOptions,
+  CreateSubAccountResponse,
+  CreateSubAccountKeyOptions,
+  CreateSubAccountKeyResponse,
+  ListSubAccountsResponse,
+  GetSubAccountResponse,
+  RevokeSubAccountKeyResponse,
+  DeleteSubAccountResponse,
 } from "./types";
 
 import { WithMemoryClient } from "./client";

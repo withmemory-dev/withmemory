@@ -13,6 +13,14 @@ import type {
   ResetExtractionPromptResponse,
   FetchMemoriesOptions,
   FetchMemoriesResponse,
+  CreateSubAccountOptions,
+  CreateSubAccountResponse,
+  CreateSubAccountKeyOptions,
+  CreateSubAccountKeyResponse,
+  ListSubAccountsResponse,
+  GetSubAccountResponse,
+  RevokeSubAccountKeyResponse,
+  DeleteSubAccountResponse,
 } from "./types";
 
 const DEFAULT_BASE_URL = "https://api.withmemory.dev";
@@ -102,6 +110,50 @@ export class WithMemoryClient {
       "/v1/account/extraction-prompt"
     );
   }
+
+  // ─── Sub-Accounts namespace ─────────────────────────────────────────────
+  readonly subAccounts = {
+    create: (options: CreateSubAccountOptions): Promise<CreateSubAccountResponse> => {
+      return this.request<CreateSubAccountResponse>("POST", "/v1/sub-accounts", options);
+    },
+
+    createKey: (
+      accountId: string,
+      options: CreateSubAccountKeyOptions
+    ): Promise<CreateSubAccountKeyResponse> => {
+      return this.request<CreateSubAccountKeyResponse>(
+        "POST",
+        `/v1/sub-accounts/${accountId}/keys`,
+        options
+      );
+    },
+
+    list: (): Promise<ListSubAccountsResponse> => {
+      return this.request<ListSubAccountsResponse>("GET", "/v1/sub-accounts");
+    },
+
+    get: (accountId: string): Promise<GetSubAccountResponse> => {
+      return this.request<GetSubAccountResponse>("GET", `/v1/sub-accounts/${accountId}`);
+    },
+
+    revokeKey: (accountId: string, keyId: string): Promise<RevokeSubAccountKeyResponse> => {
+      return this.request<RevokeSubAccountKeyResponse>(
+        "DELETE",
+        `/v1/sub-accounts/${accountId}/keys/${keyId}`
+      );
+    },
+
+    delete: (
+      accountId: string,
+      options: { confirm: true }
+    ): Promise<DeleteSubAccountResponse> => {
+      return this.request<DeleteSubAccountResponse>(
+        "DELETE",
+        `/v1/sub-accounts/${accountId}`,
+        options
+      );
+    },
+  };
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const url = `${this.baseUrl}${path}`;
