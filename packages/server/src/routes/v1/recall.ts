@@ -188,7 +188,7 @@ export function recallRoute() {
       }
       const ranking: RankingEnvelope = { strategy: "user_not_found" };
       return c.json({
-        promptBlock: defaultLines.join("\n"),
+        memoryBlock: defaultLines.join("\n"),
         memories: [],
         ranking,
       });
@@ -343,14 +343,14 @@ export function recallRoute() {
       }
     }
 
-    const promptBlock = kept.join("\n");
+    const memoryBlock = kept.join("\n");
 
     // ─── Step 8: Build response envelope ──────────────────────────────────
     const ranking: RankingEnvelope = { strategy };
     if (reason) ranking.reason = reason;
 
     return c.json({
-      promptBlock,
+      memoryBlock,
       memories: keptRows.map((m) => ({
         id: m.id,
         userId: userId,

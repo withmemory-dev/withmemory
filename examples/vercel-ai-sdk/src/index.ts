@@ -37,18 +37,18 @@ console.log(`   set tech_stack → ${stackResult.memory.value}`);
 
 console.log("\n2. Recalling memories...\n");
 
-const { promptBlock, memories } = await memory.recall({
+const { memoryBlock, memories } = await memory.recall({
   userId,
   input: userMessage,
 });
 
-console.log(`   promptBlock:\n   "${promptBlock}"\n`);
+console.log(`   memoryBlock:\n   "${memoryBlock}"\n`);
 console.log(`   ${memories.length} memories returned:`);
 for (const m of memories) {
   console.log(`     - ${m.key}: ${m.value}`);
 }
 
-// ── Step 3: Use promptBlock in an LLM call via Vercel AI SDK ──────────────────
+// ── Step 3: Use memoryBlock in an LLM call via Vercel AI SDK ──────────────────
 
 let llmResponse: string | null = null;
 
@@ -59,7 +59,7 @@ if (!OPENAI_KEY) {
 
   const { text } = await generateText({
     model: openai("gpt-4.1-mini"),
-    system: `You are a helpful assistant. Here is what you know about this user:\n${promptBlock}`,
+    system: `You are a helpful assistant. Here is what you know about this user:\n${memoryBlock}`,
     prompt: userMessage,
   });
 

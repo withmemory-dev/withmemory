@@ -4,7 +4,7 @@ This file is the primary orientation document for AI assistants working on WithM
 
 ## The product in one paragraph
 
-WithMemory is the default memory layer for AI agents. Developers integrate it with two API calls: `memory.set(userId, key, value)` to store facts explicitly, and `memory.recall({ userId, input })` to retrieve a prompt-ready context block before every LLM invocation. A third call, `memory.commit({ userId, input, output })`, runs async LLM extraction to derive durable facts from conversation turns. The output of `recall()` is a rigid contract: a `promptBlock` string under 150 tokens containing at most 4 items, safe to prepend to any system prompt. Competitors are Mem0, Zep, Letta, Supermemory. Differentiators: zero configuration, TypeScript-first, conservative extraction (70% of commits should produce zero memories), self-hostable on any Postgres.
+WithMemory is the default memory layer for AI agents. Developers integrate it with two API calls: `memory.set(userId, key, value)` to store facts explicitly, and `memory.recall({ userId, input })` to retrieve a memory block before every LLM invocation. A third call, `memory.commit({ userId, input, output })`, runs async LLM extraction to derive durable facts from conversation turns. The output of `recall()` is a rigid contract: a `memoryBlock` string under 150 tokens containing at most 4 items, safe to prepend to any system prompt. Competitors are Mem0, Zep, Letta, Supermemory. Differentiators: zero configuration, TypeScript-first, conservative extraction (70% of commits should produce zero memories), self-hostable on any Postgres.
 
 ## Positioning and strategy
 
@@ -44,7 +44,7 @@ These are rules that should not be changed without an explicit architectural dis
 
 **Secrets never live in code or in committed files.** Local dev secrets go in `.env.local` and `.dev.vars` (both gitignored). Production secrets go in Cloudflare Worker environment via `wrangler secret put`. The `.env.example` file shows the shape without real values.
 
-**The recall output contract is rigid.** `promptBlock` is always a string, always under 150 tokens, always contains at most 4 items. Do not add optional fields, do not make the length configurable, do not return null. Breaking this contract is worse than keeping it imperfect.
+**The recall output contract is rigid.** `memoryBlock` is always a string, always under 150 tokens, always contains at most 4 items. Do not add optional fields, do not make the length configurable, do not return null. Breaking this contract is worse than keeping it imperfect.
 
 **Extraction is conservative.** The extraction prompt should produce empty results from ~70% of commits. A polluted memory store actively degrades agent quality. When in doubt, extract nothing.
 
@@ -177,7 +177,7 @@ What exists:
 - `wm_memories.exchange_id` FK links extracted memories to their source exchange
 - LLM extraction library (`packages/server/src/lib/extraction.ts`) using direct OpenAI fetch (gpt-4.1-mini for extraction, text-embedding-3-small at 512 dimensions for embeddings)
 - `POST /v1/commit` returns 202 immediately, runs extraction async via `waitUntil`, supports Idempotency-Key header
-- `register()` defaults wired through `recall()` as tier 4 fallback — appears in `promptBlock` only, not in the `memories` array
+- `register()` defaults wired through `recall()` as tier 4 fallback — appears in `memoryBlock` only, not in the `memories` array
 - `WorkerEnv` type centralized in `packages/server/src/types.ts` — all env vars declared once
 - `ensureEndUser()` helper shared across `set.ts` and `commit.ts`
 - API key authentication middleware (SHA-256 hash, Bearer token, `last_used_at` updated via `ctx.waitUntil`)
