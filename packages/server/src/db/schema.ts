@@ -10,6 +10,7 @@ import {
   index,
   check,
   customType,
+  jsonb,
 } from "drizzle-orm/pg-core";
 
 // pgvector custom type — Drizzle doesn't have native vector support yet,
@@ -45,22 +46,38 @@ export type PlanTier = (typeof planTierValues)[number];
 export const planStatusValues = ["active", "past_due", "canceled", "trialing"] as const;
 export type PlanStatus = (typeof planStatusValues)[number];
 
-export const wmAccounts = pgTable("wm_accounts", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  email: text("email").notNull().unique(),
-  extractionPrompt: text("extraction_prompt"),
-  planTier: text("plan_tier").$type<PlanTier>().notNull().default("free"),
-  planStatus: text("plan_status").$type<PlanStatus>().notNull().default("active"),
-  stripeCustomerId: text("stripe_customer_id"),
-  stripeSubscriptionId: text("stripe_subscription_id"),
-  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
-  memoryLimit: integer("memory_limit").notNull().default(1000),
-  // Column exists for Session 12 Stripe integration. Not enforced as of Session 10.
-  monthlyApiCallLimit: integer("monthly_api_call_limit").notNull().default(10000),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const wmAccounts = pgTable(
+  "wm_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull().unique(),
+    extractionPrompt: text("extraction_prompt"),
+    planTier: text("plan_tier").$type<PlanTier>().notNull().default("free"),
+    planStatus: text("plan_status").$type<PlanStatus>().notNull().default("active"),
+    stripeCustomerId: text("stripe_customer_id"),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    memoryLimit: integer("memory_limit").notNull().default(1000),
+    // Column exists for Session 12 Stripe integration. Not enforced as of Session 10.
+    monthlyApiCallLimit: integer("monthly_api_call_limit").notNull().default(10000),
+    // Human-readable display name. Required for sub-accounts, optional for
+    // top-level accounts (which use email as their primary identifier).
+    name: text("name"),
+    // Arbitrary metadata JSON. Used by sub-accounts to store purpose, tags,
+    // or any context the master wants to attach. Max 4KB enforced at the route.
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    // Self-referencing FK: sub-accounts point to their parent account.
+    // NULL = top-level (parent-eligible) account. ON DELETE CASCADE removes
+    // all sub-accounts when the parent is deleted.
+    parentAccountId: uuid("parent_account_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    parentAccountIdIdx: index("wm_accounts_parent_account_id_idx").on(table.parentAccountId),
+  })
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // wm_api_keys — API keys for authenticating to the WithMemory API
@@ -76,6 +93,17 @@ export const wmApiKeys = pgTable(
     keyHash: text("key_hash").notNull(),
     keyPrefix: text("key_prefix").notNull(),
     name: text("name"),
+    // Comma-separated scope string. Default gives existing keys full access.
+    scopes: text("scopes").notNull().default("memory:read,memory:write,account:admin"),
+    // Nullable = no expiry. Non-null = auth middleware rejects after this time.
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    // Human-readable label for what/who this key was issued for.
+    issuedTo: text("issued_to"),
+    // Soft revocation: set to NOW() instead of deleting the row.
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    // Self-referencing FK: keys minted via master API point to the minting key.
+    // ON DELETE SET NULL so revoking a master key doesn't cascade to sub-account keys.
+    parentKeyId: uuid("parent_key_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -84,6 +112,8 @@ export const wmApiKeys = pgTable(
   (table) => ({
     keyHashIdx: index("wm_api_keys_key_hash_idx").on(table.keyHash),
     accountIdIdx: index("wm_api_keys_account_id_idx").on(table.accountId),
+    expiresAtIdx: index("wm_api_keys_expires_at_idx").on(table.expiresAt),
+    parentKeyIdIdx: index("wm_api_keys_parent_key_id_idx").on(table.parentKeyId),
   })
 );
 
