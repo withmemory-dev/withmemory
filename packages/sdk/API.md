@@ -4,6 +4,7 @@ This file is the canonical in-repo reference for the SDK's public surface. It do
 
 ## Changelog
 
+- **2026-04-13:** Added Sub-Accounts API — sub-account provisioning, key minting, soft revocation, key expiry, and quota inheritance. SDK namespace `subAccounts` with 6 methods. New error codes: `sub_account_limit_exceeded`, `key_expired`, `confirmation_required`. Auth middleware now supports soft revocation (`revoked_at`) and key expiry (`expires_at`). **Additive, non-breaking.**
 - **2026-04-12:** Replaced `POST /v1/memories` with `POST /v1/memories/list` — added filtering, search, sort, cursor pagination, opt-in totals. SDK method `getUserMemories()` replaced by `fetchMemories()`. **BREAKING CHANGE.**
 
 ## Route conventions
@@ -28,13 +29,16 @@ class WithMemoryError extends Error {
 
 | Code              | Origin      | HTTP Status | When                                                        |
 |-------------------|-------------|-------------|-------------------------------------------------------------|
-| `unauthorized`    | Server      | 401         | Missing, malformed, or invalid API key                      |
-| `invalid_request` | Server      | 400         | Request body fails Zod validation                           |
-| `not_found`       | Server      | 404         | Route does not exist or resource not found                   |
-| `quota_exceeded`  | Server      | 403         | Account memory limit reached                                |
-| `plan_required`   | Server      | 403         | Feature requires a higher plan tier                         |
-| `timeout`         | SDK         | 0           | Request exceeded the configured timeout                      |
-| `network_error`   | SDK         | 0           | Fetch failed (DNS, connection refused, TLS, offline, etc.)  |
+| `unauthorized`                | Server      | 401         | Missing, malformed, or invalid API key                      |
+| `key_expired`                 | Server      | 401         | API key has passed its `expires_at` timestamp               |
+| `invalid_request`             | Server      | 400         | Request body fails Zod validation                           |
+| `not_found`                   | Server      | 404         | Route does not exist or resource not found                   |
+| `quota_exceeded`              | Server      | 403         | Account memory limit reached (summed across parent + sub-accounts)  |
+| `plan_required`               | Server      | 403         | Feature requires a higher plan tier                         |
+| `sub_account_limit_exceeded`  | Server      | 403         | Account has reached its sub-account cap              |
+| `confirmation_required`       | Server      | 400         | Destructive action requires `{ confirm: true }` in body     |
+| `timeout`                     | SDK         | 0           | Request exceeded the configured timeout                      |
+| `network_error`               | SDK         | 0           | Fetch failed (DNS, connection refused, TLS, offline, etc.)  |
 
 **Convention:** Error codes are `snake_case_lower`, matching OpenAI and Stripe conventions and the server's existing style.
 
@@ -203,3 +207,93 @@ interface FetchMemoriesResponse {
 **`fetchMemories(options?)`** lists non-superseded memories with optional filtering, search, sort, and cursor-based pagination. Supports account-wide listing (omit `userId`) or per-user listing (provide `userId`). Returns a `FetchMemoriesResponse` envelope with `memories`, `nextCursor`, and optionally `total`. See the FetchMemoriesOptions and FetchMemoriesResponse types below. **`deleteMemory()`** deletes a memory by ID with account-level ownership check.
 
 **`setExtractionPrompt(prompt)`** sets a custom extraction prompt for the authenticated account. The prompt must be 1–32,768 characters after trimming whitespace. The custom prompt is used instead of the bundled default when `commit()` runs extraction. **`getExtractionPrompt()`** reads the current prompt state. **`resetExtractionPrompt()`** clears the custom prompt, reverting to the bundled default.
+
+## Sub-Accounts
+
+Sub-accounts allow Pro-and-up accounts to provision sub-accounts for autonomous agents. Sub-accounts have their own memories, keys, and end users, but quota is inherited from the parent account.
+
+All sub-account management endpoints require an API key with `account:admin` scope on a non-sub-account. Sub-account keys cannot access sub-account management endpoints.
+
+### Sub-account limits per plan tier
+
+| Plan       | Sub-account limit |
+|------------|-------------------|
+| Pro        | 10                |
+| Team       | 100               |
+| Enterprise | Unlimited         |
+
+### Sub-Account SDK methods
+
+All methods are namespaced under `subAccounts`:
+
+| Method                                          | HTTP                                          | Returns                             | Throws on error? |
+|-------------------------------------------------|-----------------------------------------------|-------------------------------------|-------------------|
+| `subAccounts.create(options)`                | `POST /v1/sub-accounts`                    | `CreateSubAccountResponse`       | Yes               |
+| `subAccounts.createKey(accountId, options)`  | `POST /v1/sub-accounts/:id/keys`           | `CreateSubAccountKeyResponse`    | Yes               |
+| `subAccounts.list()`                         | `GET /v1/sub-accounts`                     | `ListSubAccountsResponse`        | Yes               |
+| `subAccounts.get(accountId)`                 | `GET /v1/sub-accounts/:id`                 | `GetSubAccountResponse`          | Yes               |
+| `subAccounts.revokeKey(accountId, keyId)`    | `DELETE /v1/sub-accounts/:id/keys/:keyId`  | `RevokeSubAccountKeyResponse`    | Yes               |
+| `subAccounts.delete(accountId, { confirm })` | `DELETE /v1/sub-accounts/:id`              | `DeleteSubAccountResponse`       | Yes               |
+
+### SubAccount
+
+```ts
+interface SubAccount {
+  id: string;
+  parentAccountId: string;
+  name?: string;
+  metadata?: Record<string, unknown>;
+  planTier?: string;
+  memoryLimit?: number;
+  memoryCount?: number;
+  activeKeyCount?: number;
+  createdAt: string;
+}
+```
+
+### SubAccountKey
+
+```ts
+interface SubAccountKey {
+  id: string;
+  accountId: string;
+  keyPrefix: string;
+  scopes: string;
+  issuedTo: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+}
+```
+
+### CreateSubAccountKeyResponse
+
+```ts
+interface CreateSubAccountKeyResponse {
+  key: SubAccountKey;
+  rawKey: string;  // Show-once raw credential. Not stored after response.
+}
+```
+
+### Key scopes
+
+API keys have a `scopes` field (comma-separated text). Available scopes:
+
+| Scope            | Grants                                              |
+|------------------|-----------------------------------------------------|
+| `memory:read`    | `get`, `recall`, `fetchMemories`, `health`          |
+| `memory:write`   | `set`, `remove`, `commit`, `deleteMemory`           |
+| `account:admin`  | Sub-account management endpoints, extraction prompt CRUD |
+
+Existing keys default to `memory:read,memory:write,account:admin`. Sub-account keys minted via `subAccounts.createKey()` default to `memory:read,memory:write` (no `account:admin`). Specifying `account:admin` on a sub-account key returns 400.
+
+### Key expiry
+
+Keys can have an `expiresAt` timestamp. Expired keys return 401 with error code `key_expired`. Set via `expiresIn` (TTL in seconds, max 31536000 = 1 year) when creating a key.
+
+### Soft revocation
+
+Keys are soft-revoked by setting `revoked_at` instead of deleting the row. Revoked keys return 401 `unauthorized`. The `revokeKey()` method sets `revoked_at = NOW()`.
+
+### Quota inheritance
+
+Sub-account memories count against the parent account's `memory_limit`. The quota check sums active (non-superseded) memories across the parent and all its sub-accounts. When the combined limit is reached, writes on both the parent and sub-accounts return 403 `quota_exceeded`.
