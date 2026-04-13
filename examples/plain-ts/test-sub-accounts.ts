@@ -240,24 +240,35 @@ tests.push({
 tests.push({
   name: "Quota inheritance: sub-account memories count against parent limit",
   fn: async () => {
-    // Set parent memory limit to 2 — there's already 1 memory on the sub-account
-    await updateAccount(accountIdA, { memory_limit: 2 });
+    // Count current active memories across parent + all sub-accounts, then set
+    // the limit to current+1 so exactly one more write succeeds and the next fails.
+    // This makes the test resilient to pre-existing data on the parent account.
+    const countRows = await testDb`
+      SELECT count(*)::int AS total FROM wm_memories
+      WHERE account_id IN (
+        SELECT id FROM wm_accounts
+        WHERE id = ${accountIdA} OR parent_account_id = ${accountIdA}
+      )
+      AND superseded_by IS NULL
+    `;
+    const currentTotal = countRows[0].total;
+    await updateAccount(accountIdA, { memory_limit: currentTotal + 1 });
 
-    // 2nd memory should succeed (total = 2)
+    // One more write should succeed
     const res2 = await apiCall("POST", "/v1/set", {
       userId: "agent-user-1",
       key: "k2",
       value: "v2",
     }, { key: subAccountRawKey });
-    assert(res2.status === 200, `2nd write: expected 200, got ${res2.status}`);
+    assert(res2.status === 200, `write at limit-1: expected 200, got ${res2.status}`);
 
-    // 3rd should fail (quota exceeded)
+    // Next write should fail (quota exceeded)
     const res3 = await apiCall("POST", "/v1/set", {
       userId: "agent-user-1",
       key: "k3",
       value: "v3",
     }, { key: subAccountRawKey });
-    assert(res3.status === 403, `3rd write: expected 403, got ${res3.status}`);
+    assert(res3.status === 403, `write at limit: expected 403, got ${res3.status}`);
     assert(res3.body.error.code === "quota_exceeded", `expected quota_exceeded, got ${res3.body.error.code}`);
 
     // Restore limit
