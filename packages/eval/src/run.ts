@@ -60,7 +60,7 @@ async function evaluateFixture(fixture: Fixture): Promise<EvalResult> {
     openaiApiKey: OPENAI_API_KEY!,
     prompt: EXTRACTION_PROMPT,
     promptVersion: EXTRACTION_PROMPT_VERSION,
-    input: `${fixture.input}\n${fixture.output}`,
+    input: fixture.value,
   });
 
   if (result.error && result.memories.length === 0) {

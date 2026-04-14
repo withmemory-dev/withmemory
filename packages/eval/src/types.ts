@@ -2,8 +2,7 @@ export type FixtureCategory = "negative" | "positive" | "ambiguous" | "adversari
 
 export interface Fixture {
   id: string;
-  input: string;
-  output: string;
+  value: string;
   category: FixtureCategory;
   expected_memories: string[] | null;
   notes: string;
