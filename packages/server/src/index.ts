@@ -7,6 +7,14 @@ import { v1Routes } from "./routes/v1";
 
 const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
+// Request ID middleware: generate or forward a request ID on every request
+app.use("*", async (c, next) => {
+  const requestId = c.req.header("X-Request-Id") ?? crypto.randomUUID();
+  c.set("requestId", requestId);
+  c.header("X-Request-Id", requestId);
+  await next();
+});
+
 // /v1/* middleware: create db per-request from Worker bindings, then run auth
 app.use("/v1/*", async (c, next) => {
   const db = createDb(c.env.DATABASE_URL);

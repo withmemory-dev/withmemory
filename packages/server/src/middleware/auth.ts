@@ -12,9 +12,17 @@ export function authMiddleware(db: Db) {
   return async (c: Context, next: Next) => {
     const authHeader = c.req.header("Authorization");
 
+    const requestId = c.get("requestId");
+
     if (!authHeader) {
       return c.json(
-        { error: { code: "unauthorized", message: "Missing Authorization header" } },
+        {
+          error: {
+            code: "unauthorized",
+            message: "Missing Authorization header",
+            request_id: requestId,
+          },
+        },
         401
       );
     }
@@ -27,6 +35,7 @@ export function authMiddleware(db: Db) {
           error: {
             code: "unauthorized",
             message: "Malformed Authorization header. Expected format: Bearer <key>",
+            request_id: requestId,
           },
         },
         401
@@ -46,7 +55,10 @@ export function authMiddleware(db: Db) {
       .limit(1);
 
     if (result.length === 0) {
-      return c.json({ error: { code: "unauthorized", message: "Invalid API key" } }, 401);
+      return c.json(
+        { error: { code: "unauthorized", message: "Invalid API key", request_id: requestId } },
+        401
+      );
     }
 
     const { apiKey, account } = result[0];
@@ -54,7 +66,10 @@ export function authMiddleware(db: Db) {
     // Check key expiry — expired keys return a distinct error code so
     // agents can distinguish "key expired" from "key invalid"
     if (apiKey.expiresAt && apiKey.expiresAt.getTime() <= Date.now()) {
-      return c.json({ error: { code: "key_expired", message: "API key has expired" } }, 401);
+      return c.json(
+        { error: { code: "key_expired", message: "API key has expired", request_id: requestId } },
+        401
+      );
     }
 
     c.set("account", account);

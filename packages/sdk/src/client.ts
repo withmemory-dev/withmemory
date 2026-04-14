@@ -1,4 +1,4 @@
-import { WithMemoryError } from "./errors";
+import { WithMemoryError, TimeoutError, NetworkError, createError } from "./errors";
 import type {
   WithMemoryConfig,
   AddParams,
@@ -15,6 +15,7 @@ import type {
   ResetExtractionPromptResponse,
   ListOptions,
   ListResponse,
+  RequestOptions,
   CreateContainerOptions,
   CreateContainerResponse,
   CreateContainerKeyOptions,
@@ -29,41 +30,51 @@ import type {
 } from "./types";
 
 const DEFAULT_BASE_URL = "https://api.withmemory.dev";
-const DEFAULT_TIMEOUT = 30_000;
+const DEFAULT_TIMEOUT = 60_000;
+const DEFAULT_MAX_RETRIES = 3;
+
+const RETRYABLE_STATUS_CODES = new Set([408, 409, 429, 500, 502, 503, 504]);
 
 export class WithMemoryClient {
   private apiKey: string;
   private baseUrl: string;
   private timeout: number;
+  private maxRetries: number;
   private registeredDefaults: Record<string, string> = {};
 
   constructor(config: WithMemoryConfig) {
     this.apiKey = config.apiKey;
     this.baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
     this.timeout = config.timeout ?? DEFAULT_TIMEOUT;
+    this.maxRetries = config.maxRetries ?? DEFAULT_MAX_RETRIES;
   }
 
   register(defaults: RegisterDefaults): void {
     this.registeredDefaults = { ...defaults };
   }
 
-  async add(params: AddParams): Promise<AddResponse> {
+  async add(params: AddParams, options?: RequestOptions): Promise<AddResponse> {
     const body: Record<string, unknown> = {
       forScope: params.forScope,
       value: params.value,
     };
     if (params.forKey !== undefined) body.forKey = params.forKey;
-    return this.request<AddResponse>("POST", "/v1/memories", body);
+    return this.request<AddResponse>("POST", "/v1/memories", body, options);
   }
 
-  async get(params: GetParams): Promise<GetResponse> {
-    return this.request<GetResponse>("POST", "/v1/memories/get", {
-      forScope: params.forScope,
-      forKey: params.forKey,
-    });
+  async get(params: GetParams, options?: RequestOptions): Promise<GetResponse> {
+    return this.request<GetResponse>(
+      "POST",
+      "/v1/memories/get",
+      {
+        forScope: params.forScope,
+        forKey: params.forKey,
+      },
+      options
+    );
   }
 
-  async recall(options: RecallOptions): Promise<RecallResponse> {
+  async recall(options: RecallOptions, requestOptions?: RequestOptions): Promise<RecallResponse> {
     const mergedDefaults = {
       ...this.registeredDefaults,
       ...(options.defaults ?? {}),
@@ -75,17 +86,22 @@ export class WithMemoryClient {
     if (options.maxItems !== undefined) body.maxItems = options.maxItems;
     if (options.maxTokens !== undefined) body.maxTokens = options.maxTokens;
     if (Object.keys(mergedDefaults).length > 0) body.defaults = mergedDefaults;
-    return this.request<RecallResponse>("POST", "/v1/recall", body);
+    return this.request<RecallResponse>("POST", "/v1/recall", body, requestOptions);
   }
 
-  async remove(params: RemoveParams): Promise<RemoveResponse> {
-    return this.request<RemoveResponse>("POST", "/v1/memories/remove", {
-      forScope: params.forScope,
-      forKey: params.forKey,
-    });
+  async remove(params: RemoveParams, options?: RequestOptions): Promise<RemoveResponse> {
+    return this.request<RemoveResponse>(
+      "POST",
+      "/v1/memories/remove",
+      {
+        forScope: params.forScope,
+        forKey: params.forKey,
+      },
+      options
+    );
   }
 
-  async list(options?: ListOptions): Promise<ListResponse> {
+  async list(options?: ListOptions, requestOptions?: RequestOptions): Promise<ListResponse> {
     const body: Record<string, unknown> = {};
     if (options) {
       if (options.forScope !== undefined) body.forScope = options.forScope;
@@ -99,127 +115,233 @@ export class WithMemoryClient {
       if (options.cursor !== undefined) body.cursor = options.cursor;
       if (options.includeTotal !== undefined) body.includeTotal = options.includeTotal;
     }
-    return this.request<ListResponse>("POST", "/v1/memories/list", body);
+    return this.request<ListResponse>("POST", "/v1/memories/list", body, requestOptions);
   }
 
-  async deleteMemory(memoryId: string): Promise<RemoveResponse> {
-    return this.request<RemoveResponse>("DELETE", `/v1/memories/${memoryId}`);
+  async deleteMemory(memoryId: string, options?: RequestOptions): Promise<RemoveResponse> {
+    return this.request<RemoveResponse>("DELETE", `/v1/memories/${memoryId}`, undefined, options);
   }
 
-  async health(): Promise<HealthResponse> {
-    return this.request<HealthResponse>("GET", "/v1/health");
+  async health(options?: RequestOptions): Promise<HealthResponse> {
+    return this.request<HealthResponse>("GET", "/v1/health", undefined, options);
   }
 
-  async setExtractionPrompt(prompt: string): Promise<ExtractionPromptResponse> {
-    return this.request<ExtractionPromptResponse>("POST", "/v1/account/extraction-prompt", {
-      prompt,
-    });
+  async setExtractionPrompt(
+    prompt: string,
+    options?: RequestOptions
+  ): Promise<ExtractionPromptResponse> {
+    return this.request<ExtractionPromptResponse>(
+      "POST",
+      "/v1/account/extraction-prompt",
+      { prompt },
+      options
+    );
   }
 
-  async getExtractionPrompt(): Promise<ExtractionPromptResponse> {
-    return this.request<ExtractionPromptResponse>("GET", "/v1/account/extraction-prompt");
+  async getExtractionPrompt(options?: RequestOptions): Promise<ExtractionPromptResponse> {
+    return this.request<ExtractionPromptResponse>(
+      "GET",
+      "/v1/account/extraction-prompt",
+      undefined,
+      options
+    );
   }
 
-  async resetExtractionPrompt(): Promise<ResetExtractionPromptResponse> {
-    return this.request<ResetExtractionPromptResponse>("DELETE", "/v1/account/extraction-prompt");
+  async resetExtractionPrompt(options?: RequestOptions): Promise<ResetExtractionPromptResponse> {
+    return this.request<ResetExtractionPromptResponse>(
+      "DELETE",
+      "/v1/account/extraction-prompt",
+      undefined,
+      options
+    );
   }
 
   // ─── Containers namespace ────────────────────────────────────────────────
   readonly containers = {
-    create: (options: CreateContainerOptions): Promise<CreateContainerResponse> => {
-      return this.request<CreateContainerResponse>("POST", "/v1/containers", options);
+    create: (
+      options: CreateContainerOptions,
+      requestOptions?: RequestOptions
+    ): Promise<CreateContainerResponse> => {
+      return this.request<CreateContainerResponse>(
+        "POST",
+        "/v1/containers",
+        options,
+        requestOptions
+      );
     },
 
-    createKey: (options: CreateContainerKeyOptions): Promise<CreateContainerKeyResponse> => {
+    createKey: (
+      options: CreateContainerKeyOptions,
+      requestOptions?: RequestOptions
+    ): Promise<CreateContainerKeyResponse> => {
       const { forContainer, ...body } = options;
       return this.request<CreateContainerKeyResponse>(
         "POST",
         `/v1/containers/${forContainer}/keys`,
-        body
+        body,
+        requestOptions
       );
     },
 
-    list: (): Promise<ListContainersResponse> => {
-      return this.request<ListContainersResponse>("GET", "/v1/containers");
+    list: (requestOptions?: RequestOptions): Promise<ListContainersResponse> => {
+      return this.request<ListContainersResponse>(
+        "GET",
+        "/v1/containers",
+        undefined,
+        requestOptions
+      );
     },
 
-    get: (options: GetContainerOptions): Promise<GetContainerResponse> => {
-      return this.request<GetContainerResponse>("GET", `/v1/containers/${options.forContainer}`);
+    get: (
+      options: GetContainerOptions,
+      requestOptions?: RequestOptions
+    ): Promise<GetContainerResponse> => {
+      return this.request<GetContainerResponse>(
+        "GET",
+        `/v1/containers/${options.forContainer}`,
+        undefined,
+        requestOptions
+      );
     },
 
-    revokeKey: (options: RevokeContainerKeyOptions): Promise<RevokeContainerKeyResponse> => {
+    revokeKey: (
+      options: RevokeContainerKeyOptions,
+      requestOptions?: RequestOptions
+    ): Promise<RevokeContainerKeyResponse> => {
       return this.request<RevokeContainerKeyResponse>(
         "DELETE",
-        `/v1/containers/${options.forContainer}/keys/${options.forKey}`
+        `/v1/containers/${options.forContainer}/keys/${options.forKey}`,
+        undefined,
+        requestOptions
       );
     },
 
-    delete: (options: DeleteContainerOptions): Promise<DeleteContainerResponse> => {
+    delete: (
+      options: DeleteContainerOptions,
+      requestOptions?: RequestOptions
+    ): Promise<DeleteContainerResponse> => {
       return this.request<DeleteContainerResponse>(
         "DELETE",
         `/v1/containers/${options.forContainer}`,
-        { confirm: options.confirm }
+        { confirm: options.confirm },
+        requestOptions
       );
     },
   };
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    options?: RequestOptions
+  ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeout);
+    const timeout = options?.timeout ?? this.timeout;
+    const maxRetries = options?.maxRetries ?? this.maxRetries;
 
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        method,
-        headers: {
-          ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-          Authorization: `Bearer ${this.apiKey}`,
-        },
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
-      });
-    } catch (err: unknown) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        throw new WithMemoryError(
-          0,
-          "timeout",
-          `Request to ${path} timed out after ${this.timeout}ms`
-        );
+    let lastError: WithMemoryError | undefined;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      // Wait before retrying (not on first attempt)
+      if (attempt > 0) {
+        const delay = Math.min(500 * Math.pow(2, attempt - 1), 4000);
+        const jitter = Math.random() * 500;
+        await new Promise((resolve) => setTimeout(resolve, delay + jitter));
       }
-      const message = err instanceof Error ? err.message : "Network request failed";
-      throw new WithMemoryError(0, "network_error", message);
-    } finally {
-      clearTimeout(timer);
-    }
 
-    if (!response.ok) {
-      let errorBody: { error?: { code?: string; message?: string; details?: unknown } };
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeout);
+
+      // Compose caller signal with timeout signal
+      if (options?.signal) {
+        if (options.signal.aborted) {
+          clearTimeout(timer);
+          throw new TimeoutError("Request aborted by caller");
+        }
+        options.signal.addEventListener("abort", () => controller.abort(), { once: true });
+      }
+
+      let response: Response;
       try {
-        errorBody = (await response.json()) as typeof errorBody;
-      } catch {
-        throw new WithMemoryError(
-          response.status,
-          "network_error",
-          `HTTP ${response.status}: Non-JSON error response from ${path}`
-        );
+        response = await fetch(url, {
+          method,
+          headers: {
+            ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+          body: body !== undefined ? JSON.stringify(body) : undefined,
+          signal: controller.signal,
+        });
+      } catch (err: unknown) {
+        clearTimeout(timer);
+        if (err instanceof DOMException && err.name === "AbortError") {
+          lastError = new TimeoutError(`Request to ${path} timed out after ${timeout}ms`);
+        } else {
+          const message = err instanceof Error ? err.message : "Network request failed";
+          lastError = new NetworkError(message);
+        }
+        // Network errors and timeouts are retryable
+        if (attempt < maxRetries) continue;
+        throw lastError;
+      } finally {
+        clearTimeout(timer);
       }
 
-      const code = errorBody.error?.code ?? "network_error";
-      const message = errorBody.error?.message ?? `HTTP ${response.status}`;
-      const details = errorBody.error?.details;
-      throw new WithMemoryError(response.status, code, message, details);
+      // Read request ID from response header
+      const requestId = response.headers.get("X-Request-Id") ?? undefined;
+
+      if (!response.ok) {
+        let errorBody: {
+          error?: { code?: string; message?: string; details?: unknown; request_id?: string };
+        };
+        try {
+          errorBody = (await response.json()) as typeof errorBody;
+        } catch {
+          lastError = new NetworkError(
+            `HTTP ${response.status}: Non-JSON error response from ${path}`,
+            { requestId }
+          );
+          if (RETRYABLE_STATUS_CODES.has(response.status) && attempt < maxRetries) continue;
+          throw lastError;
+        }
+
+        const code = errorBody.error?.code ?? "network_error";
+        const message = errorBody.error?.message ?? `HTTP ${response.status}`;
+        const details = errorBody.error?.details;
+        const rid = errorBody.error?.request_id ?? requestId;
+
+        lastError = createError(message, {
+          status: response.status,
+          code,
+          details,
+          requestId: rid,
+        });
+
+        // Retry-After header support for 429 and 503
+        if ((response.status === 429 || response.status === 503) && attempt < maxRetries) {
+          const retryAfter = response.headers.get("Retry-After");
+          if (retryAfter) {
+            const seconds = Number.parseInt(retryAfter, 10);
+            if (Number.isFinite(seconds) && seconds > 0 && seconds <= 60) {
+              await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+            }
+          }
+          continue;
+        }
+
+        if (RETRYABLE_STATUS_CODES.has(response.status) && attempt < maxRetries) continue;
+        throw lastError;
+      }
+
+      try {
+        return (await response.json()) as T;
+      } catch {
+        throw new NetworkError(`Invalid JSON in response body from ${path}`);
+      }
     }
 
-    try {
-      return (await response.json()) as T;
-    } catch {
-      throw new WithMemoryError(
-        response.status,
-        "network_error",
-        `Invalid JSON in response body from ${path}`
-      );
-    }
+    // Should not reach here, but satisfy TypeScript
+    throw lastError ?? new NetworkError("Request failed after retries");
   }
 }
 

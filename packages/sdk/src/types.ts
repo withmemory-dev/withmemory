@@ -1,7 +1,19 @@
 export interface WithMemoryConfig {
   apiKey: string;
   baseUrl?: string;
+  /** Request timeout in milliseconds. Default: 60000 (60 seconds). */
   timeout?: number;
+  /** Maximum number of automatic retries on transient failures. Default: 3. */
+  maxRetries?: number;
+}
+
+export interface RequestOptions {
+  /** Override the client's default timeout for this request (milliseconds). */
+  timeout?: number;
+  /** Override the client's default max retries for this request. */
+  maxRetries?: number;
+  /** Abort signal to cancel the request. */
+  signal?: AbortSignal;
 }
 
 export interface Memory {

@@ -46,11 +46,49 @@ All SDK errors are instances of `WithMemoryError`, which extends `Error`:
 
 ```ts
 class WithMemoryError extends Error {
-  status: number;    // HTTP status code (0 for network/timeout errors)
-  code: string;      // Machine-readable error code (see table below)
-  details?: unknown; // Optional structured details (e.g., Zod validation issues)
+  readonly status: number;     // HTTP status code (0 for network/timeout errors)
+  readonly code: string;       // Machine-readable error code (see table below)
+  readonly details?: unknown;  // Optional structured details (e.g., Zod validation issues)
+  readonly requestId?: string; // Server-assigned request ID for debugging
 }
 ```
+
+Every error response from the server includes a `request_id` field in the error envelope and an `X-Request-Id` response header. The SDK populates `WithMemoryError.requestId` from these values.
+
+### Typed error subclasses
+
+Each error code maps to a named subclass. Both patterns work:
+
+```ts
+import { WithMemoryError, UnauthorizedError } from '@withmemory/sdk';
+
+try {
+  await memory.add({ forScope: 'alice', value: '...' });
+} catch (err) {
+  // Pattern 1: direct import
+  if (err instanceof UnauthorizedError) { /* ... */ }
+
+  // Pattern 2: static property
+  if (err instanceof WithMemoryError.UnauthorizedError) { /* ... */ }
+
+  // Pattern 3: code check (still works)
+  if (err instanceof WithMemoryError && err.code === 'unauthorized') { /* ... */ }
+}
+```
+
+| Subclass | Code |
+|----------|------|
+| `UnauthorizedError` | `unauthorized` |
+| `KeyExpiredError` | `key_expired` |
+| `InvalidRequestError` | `invalid_request` |
+| `NotFoundError` | `not_found` |
+| `QuotaExceededError` | `quota_exceeded` |
+| `PlanRequiredError` | `plan_required` |
+| `ContainerLimitExceededError` | `container_limit_exceeded` |
+| `ConfirmationRequiredError` | `confirmation_required` |
+| `ExtractionFailedError` | `extraction_failed` |
+| `TimeoutError` | `timeout` |
+| `NetworkError` | `network_error` |
 
 ### Error codes
 
@@ -67,6 +105,56 @@ class WithMemoryError extends Error {
 | `extraction_failed` | Server | 500 | LLM extraction pipeline failed (extraction path only) |
 | `timeout` | SDK | 0 | Request exceeded the configured timeout |
 | `network_error` | SDK | 0 | Fetch failed (DNS, connection refused, TLS, offline, etc.) |
+
+### Auto-retry
+
+The SDK automatically retries transient failures with exponential backoff and jitter. Retryable conditions:
+
+- **HTTP status codes:** 408, 409, 429, 500, 502, 503, 504
+- **Network errors:** DNS failure, connection refused, timeout
+
+Non-retryable status codes (400, 401, 403, 404) are never retried.
+
+The `Retry-After` header is respected on 429 and 503 responses.
+
+**Configuration:**
+
+```ts
+// Client-level default (applies to all requests)
+const client = createClient({ apiKey: 'wm_...', maxRetries: 5 });
+
+// Per-request override
+await memory.add({ forScope: 'alice', value: '...' }, { maxRetries: 0 });
+```
+
+Default: 3 retries. Set `maxRetries: 0` to disable retries for a specific call.
+
+**Idempotency note:** when using auto-retry on the extraction path (add without `forKey`), pass an `Idempotency-Key` header via request options to avoid duplicate extraction writes on retry.
+
+### Timeouts
+
+Default timeout: 60 seconds. Configurable at the client level and per-request:
+
+```ts
+const client = createClient({ apiKey: 'wm_...', timeout: 30000 });
+await memory.add({ forScope: 'alice', value: '...' }, { timeout: 10000 });
+```
+
+Each retry attempt gets its own fresh timeout. A timeout on one attempt does not consume all retries.
+
+### Health endpoints
+
+Three health endpoints serve different purposes:
+
+| Endpoint | Auth | Purpose |
+|----------|------|---------|
+| `GET /health` | No | Is the service reachable and responding? |
+| `GET /health/db` | No | Can the service reach its database? |
+| `GET /v1/health` | Yes | Is the service up AND is my API key valid? |
+
+### Request IDs
+
+Every response includes an `X-Request-Id` header. Error responses also include `request_id` in the error envelope body. To thread your own tracing ID, pass `X-Request-Id` in the request headers.
 
 ## Types
 

@@ -31,7 +31,11 @@ export function accountRoute() {
     try {
       requirePlan(account, ["pro", "team", "enterprise"]);
     } catch (e) {
-      if (e instanceof PlanEnforcementError) return c.json(e.toResponseBody(), 403);
+      if (e instanceof PlanEnforcementError) {
+        const body = e.toResponseBody();
+        body.error.request_id = c.get("requestId");
+        return c.json(body, 403);
+      }
       throw e;
     }
 

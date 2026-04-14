@@ -81,7 +81,11 @@ export function containersRoute() {
     try {
       requirePlan(account, ["pro", "team", "enterprise"]);
     } catch (e) {
-      if (e instanceof PlanEnforcementError) return c.json(e.toResponseBody(), 403);
+      if (e instanceof PlanEnforcementError) {
+        const body = e.toResponseBody();
+        body.error.request_id = c.get("requestId");
+        return c.json(body, 403);
+      }
       throw e;
     }
 
@@ -99,6 +103,7 @@ export function containersRoute() {
           error: {
             code: "container_limit_exceeded",
             message: `Container limit reached (${current} / ${limit}). Upgrade to increase your limit.`,
+            request_id: c.get("requestId"),
             details: { current, limit, plan_tier: account.planTier },
           },
         },
@@ -152,7 +157,11 @@ export function containersRoute() {
     try {
       requirePlan(account, ["pro", "team", "enterprise"]);
     } catch (e) {
-      if (e instanceof PlanEnforcementError) return c.json(e.toResponseBody(), 403);
+      if (e instanceof PlanEnforcementError) {
+        const body = e.toResponseBody();
+        body.error.request_id = c.get("requestId");
+        return c.json(body, 403);
+      }
       throw e;
     }
 
@@ -164,6 +173,7 @@ export function containersRoute() {
           error: {
             code: "invalid_request",
             message: "Container keys cannot have account:admin scope",
+            request_id: c.get("requestId"),
           },
         },
         400
@@ -178,7 +188,16 @@ export function containersRoute() {
       .limit(1);
 
     if (!container) {
-      return c.json({ error: { code: "not_found", message: "Container not found" } }, 404);
+      return c.json(
+        {
+          error: {
+            code: "not_found",
+            message: "Container not found",
+            request_id: c.get("requestId"),
+          },
+        },
+        404
+      );
     }
 
     // Generate raw key: wm_live_ + base64url(32 random bytes)
@@ -235,7 +254,11 @@ export function containersRoute() {
     try {
       requirePlan(account, ["pro", "team", "enterprise"]);
     } catch (e) {
-      if (e instanceof PlanEnforcementError) return c.json(e.toResponseBody(), 403);
+      if (e instanceof PlanEnforcementError) {
+        const body = e.toResponseBody();
+        body.error.request_id = c.get("requestId");
+        return c.json(body, 403);
+      }
       throw e;
     }
 
@@ -280,7 +303,11 @@ export function containersRoute() {
     try {
       requirePlan(account, ["pro", "team", "enterprise"]);
     } catch (e) {
-      if (e instanceof PlanEnforcementError) return c.json(e.toResponseBody(), 403);
+      if (e instanceof PlanEnforcementError) {
+        const body = e.toResponseBody();
+        body.error.request_id = c.get("requestId");
+        return c.json(body, 403);
+      }
       throw e;
     }
 
@@ -291,7 +318,16 @@ export function containersRoute() {
       .limit(1);
 
     if (!container) {
-      return c.json({ error: { code: "not_found", message: "Container not found" } }, 404);
+      return c.json(
+        {
+          error: {
+            code: "not_found",
+            message: "Container not found",
+            request_id: c.get("requestId"),
+          },
+        },
+        404
+      );
     }
 
     const [[memoryRow], [keyRow]] = await Promise.all([
@@ -343,7 +379,10 @@ export function containersRoute() {
       .limit(1);
 
     if (!targetKey) {
-      return c.json({ error: { code: "not_found", message: "Key not found" } }, 404);
+      return c.json(
+        { error: { code: "not_found", message: "Key not found", request_id: c.get("requestId") } },
+        404
+      );
     }
 
     const now = new Date();
@@ -371,7 +410,16 @@ export function containersRoute() {
         .limit(1);
 
       if (!container) {
-        return c.json({ error: { code: "not_found", message: "Container not found" } }, 404);
+        return c.json(
+          {
+            error: {
+              code: "not_found",
+              message: "Container not found",
+              request_id: c.get("requestId"),
+            },
+          },
+          404
+        );
       }
 
       // FK CASCADE handles memories, end users, keys

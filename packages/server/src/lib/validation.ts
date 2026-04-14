@@ -18,6 +18,7 @@ export function zodErrorHook(
           code: "invalid_request",
           message: "Invalid request body",
           details: result.error!.issues,
+          request_id: c.get("requestId"),
         },
       },
       400

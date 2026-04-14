@@ -12,4 +12,5 @@ export type AppVariables = {
   db: Database;
   account: WmAccount;
   apiKey: WmApiKey;
+  requestId: string;
 };

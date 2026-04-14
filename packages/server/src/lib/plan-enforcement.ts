@@ -156,7 +156,7 @@ export class PlanEnforcementError extends Error {
    * HTTP 403.
    */
   toResponseBody(): {
-    error: { code: string; message: string; details: Record<string, unknown> };
+    error: { code: string; message: string; details: Record<string, unknown>; request_id?: string };
   } {
     return {
       error: {

@@ -23,7 +23,10 @@ export function v1Routes() {
   // Catch-all for unknown /v1/* routes — returns the standard error envelope
   // so the SDK always gets a parseable { error: { code, message } } response.
   app.all("*", (c) => {
-    return c.json({ error: { code: "not_found", message: "Route not found" } }, 404);
+    return c.json(
+      { error: { code: "not_found", message: "Route not found", request_id: c.get("requestId") } },
+      404
+    );
   });
 
   return app;

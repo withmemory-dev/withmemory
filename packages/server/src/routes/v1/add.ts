@@ -33,7 +33,11 @@ export function addRoute() {
     try {
       await checkMemoryQuota(db, account, 1);
     } catch (e) {
-      if (e instanceof PlanEnforcementError) return c.json(e.toResponseBody(), 403);
+      if (e instanceof PlanEnforcementError) {
+        const body = e.toResponseBody();
+        body.error.request_id = c.get("requestId");
+        return c.json(body, 403);
+      }
       throw e;
     }
 
@@ -102,6 +106,7 @@ export function addRoute() {
             error: {
               code: "invalid_request",
               message: "Value exceeds maximum size for extraction",
+              request_id: c.get("requestId"),
               details: { maxBytes, actualBytes },
             },
           },
@@ -132,11 +137,20 @@ export function addRoute() {
         return c.json({ memories });
       } catch (err) {
         if (err instanceof ExtractionError) {
-          return c.json({ error: { code: err.code, message: err.message } }, err.status as 500);
+          return c.json(
+            { error: { code: err.code, message: err.message, request_id: c.get("requestId") } },
+            err.status as 500
+          );
         }
         console.error("Extraction failed:", err);
         return c.json(
-          { error: { code: "extraction_failed", message: "Extraction pipeline failed" } },
+          {
+            error: {
+              code: "extraction_failed",
+              message: "Extraction pipeline failed",
+              request_id: c.get("requestId"),
+            },
+          },
           500
         );
       }

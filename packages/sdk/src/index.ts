@@ -1,5 +1,18 @@
 export { WithMemoryClient, createClient } from "./client";
-export { WithMemoryError } from "./errors";
+export {
+  WithMemoryError,
+  UnauthorizedError,
+  KeyExpiredError,
+  InvalidRequestError,
+  NotFoundError,
+  QuotaExceededError,
+  PlanRequiredError,
+  ExtractionFailedError,
+  ContainerLimitExceededError,
+  ConfirmationRequiredError,
+  TimeoutError,
+  NetworkError,
+} from "./errors";
 export type {
   WithMemoryConfig,
   Memory,
@@ -12,6 +25,7 @@ export type {
   RemoveResponse,
   HealthResponse,
   RecallOptions,
+  RequestOptions,
   RegisterDefaults,
   ExtractionPromptResponse,
   ResetExtractionPromptResponse,
@@ -37,6 +51,7 @@ import type {
   WithMemoryConfig,
   RegisterDefaults,
   RecallOptions,
+  RequestOptions,
   AddParams,
   GetParams,
   RemoveParams,
@@ -69,44 +84,44 @@ export const memory = {
     getInstance().register(defaults);
   },
 
-  add(params: AddParams) {
-    return getInstance().add(params);
+  add(params: AddParams, options?: RequestOptions) {
+    return getInstance().add(params, options);
   },
 
-  get(params: GetParams) {
-    return getInstance().get(params);
+  get(params: GetParams, options?: RequestOptions) {
+    return getInstance().get(params, options);
   },
 
-  recall(options: RecallOptions) {
-    return getInstance().recall(options);
+  recall(options: RecallOptions, requestOptions?: RequestOptions) {
+    return getInstance().recall(options, requestOptions);
   },
 
-  remove(params: RemoveParams) {
-    return getInstance().remove(params);
+  remove(params: RemoveParams, options?: RequestOptions) {
+    return getInstance().remove(params, options);
   },
 
-  list(options?: ListOptions) {
-    return getInstance().list(options);
+  list(options?: ListOptions, requestOptions?: RequestOptions) {
+    return getInstance().list(options, requestOptions);
   },
 
-  deleteMemory(memoryId: string) {
-    return getInstance().deleteMemory(memoryId);
+  deleteMemory(memoryId: string, options?: RequestOptions) {
+    return getInstance().deleteMemory(memoryId, options);
   },
 
-  health() {
-    return getInstance().health();
+  health(options?: RequestOptions) {
+    return getInstance().health(options);
   },
 
-  setExtractionPrompt(prompt: string) {
-    return getInstance().setExtractionPrompt(prompt);
+  setExtractionPrompt(prompt: string, options?: RequestOptions) {
+    return getInstance().setExtractionPrompt(prompt, options);
   },
 
-  getExtractionPrompt() {
-    return getInstance().getExtractionPrompt();
+  getExtractionPrompt(options?: RequestOptions) {
+    return getInstance().getExtractionPrompt(options);
   },
 
-  resetExtractionPrompt() {
-    return getInstance().resetExtractionPrompt();
+  resetExtractionPrompt(options?: RequestOptions) {
+    return getInstance().resetExtractionPrompt(options);
   },
 
   get containers() {

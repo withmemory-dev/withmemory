@@ -163,7 +163,16 @@ export function memoriesRoute() {
     if (cursor) {
       const decoded = decodeCursor(cursor);
       if (!decoded) {
-        return c.json({ error: { code: "invalid_request", message: "Invalid cursor" } }, 400);
+        return c.json(
+          {
+            error: {
+              code: "invalid_request",
+              message: "Invalid cursor",
+              request_id: c.get("requestId"),
+            },
+          },
+          400
+        );
       }
 
       if (decoded.v === null) {
@@ -263,6 +272,7 @@ export function memoriesRoute() {
           error: {
             code: "invalid_request",
             message: "Invalid memory ID format",
+            request_id: c.get("requestId"),
           },
         },
         400
