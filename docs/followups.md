@@ -16,4 +16,16 @@ Drizzle Kit pooler pipeline unreliable. Session pooler URL (PROD_MIGRATION_URL) 
 
 **Logged:** April 2026
 
+## test:e2e script only runs test-set-recall.ts
+
+**Logged:** April 2026
+
+The root `pnpm test:e2e` script only runs `examples/plain-ts/test-set-recall.ts`. It does not run `test-containers.ts` or any other `test-*.ts` files in that directory. This means 17+ container tests are silently skipped unless run manually. Fix: update the script to glob `examples/plain-ts/test-*.ts` or list both files explicitly.
+
+---
+
+## Commit quota is pre-check only
+
+**Logged:** April 2026
+
 Commit quota is pre-check-only; extraction can produce N memories per exchange. `POST /v1/commit` gates with `checkMemoryQuota(db, account, 1)` before extraction runs, because LLM extraction count is unknown until completion. A single verbose exchange from an account near its limit can produce multiple memories and transiently exceed quota by the extraction-output count minus 1. Possible fix: add a post-extraction per-memory quota check inside the `waitUntil` loop, or add a DB-level check constraint or trigger that rejects individual inserts when `wm_accounts.memory_limit` is crossed. Low priority — bounded by extraction output size, rarely hit in practice.

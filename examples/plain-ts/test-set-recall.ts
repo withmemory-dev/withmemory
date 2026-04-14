@@ -153,10 +153,10 @@ tests.push({
       `context missing "subscription: pro"`
     );
     // Verify all three keys are present (order depends on semantic ranking)
-    const keys = new Set(res.body.memories.map((m: any) => m.key));
-    assert(keys.has("subscription"), `missing key "subscription"`);
-    assert(keys.has("role"), `missing key "role"`);
-    assert(keys.has("name"), `missing key "name"`);
+    const keys = new Set(res.body.memories.map((m: any) => m.forKey));
+    assert(keys.has("subscription"), `missing forKey "subscription"`);
+    assert(keys.has("role"), `missing forKey "role"`);
+    assert(keys.has("name"), `missing forKey "name"`);
   },
 });
 
@@ -972,6 +972,50 @@ tests.push({
       // Teardown: restore free tier and clear prompt
       await updateTestAccount({ plan_tier: "free", extraction_prompt: null });
     }
+  },
+});
+
+// ── Backward compatibility: deprecation warning on old parameter names ───────
+
+tests.push({
+  name: "Old parameter names (userId, key) emit X-Deprecation-Warning header",
+  fn: async () => {
+    const response = await fetch(`${BASE_URL}/v1/set`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${API_KEY}`,
+      },
+      body: JSON.stringify({ userId: forScope, key: "compat_test", value: "backward compat" }),
+    });
+    assert(response.status === 200, `expected 200, got ${response.status}`);
+    const warning = response.headers.get("x-deprecation-warning");
+    assert(warning !== null, "expected X-Deprecation-Warning header");
+    assert(warning!.includes("forScope"), `expected warning to mention "forScope", got: ${warning}`);
+    assert(warning!.includes("forKey"), `expected warning to mention "forKey", got: ${warning}`);
+    // Clean up
+    await apiCall("/v1/remove", { forScope, forKey: "compat_test" });
+  },
+});
+
+// ── Backward compatibility: old /v1/sub-accounts route returns 308 redirect ──
+
+tests.push({
+  name: "Old /v1/sub-accounts route returns 308 redirect to /v1/containers",
+  fn: async () => {
+    const response = await fetch(`${BASE_URL}/v1/sub-accounts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${API_KEY}`,
+      },
+      body: JSON.stringify({ name: "redirect-test" }),
+      redirect: "manual",
+    });
+    assert(response.status === 308, `expected 308, got ${response.status}`);
+    const location = response.headers.get("location");
+    assert(location !== null, "expected Location header");
+    assert(location!.includes("/v1/containers"), `expected Location to include "/v1/containers", got: ${location}`);
   },
 });
 
