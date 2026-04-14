@@ -3,8 +3,8 @@ export { WithMemoryError } from "./errors";
 export type {
   WithMemoryConfig,
   Memory,
-  SetParams,
-  SetResponse,
+  AddParams,
+  AddResponse,
   GetParams,
   GetResponse,
   RemoveParams,
@@ -12,7 +12,6 @@ export type {
   RemoveResponse,
   HealthResponse,
   RecallOptions,
-  CommitOptions,
   RegisterDefaults,
   ExtractionPromptResponse,
   ResetExtractionPromptResponse,
@@ -38,8 +37,7 @@ import type {
   WithMemoryConfig,
   RegisterDefaults,
   RecallOptions,
-  CommitOptions,
-  SetParams,
+  AddParams,
   GetParams,
   RemoveParams,
   ListOptions,
@@ -49,7 +47,7 @@ import type {
 // Usage:
 //   import { memory } from '@withmemory/sdk';
 //   memory.configure({ apiKey: 'wm_...' });
-//   await memory.set({ value: 'Alice', forKey: 'name', forScope: 'user_1' });
+//   await memory.add({ value: 'Alice', forKey: 'name', forScope: 'user_1' });
 
 let instance: WithMemoryClient | null = null;
 
@@ -71,8 +69,8 @@ export const memory = {
     getInstance().register(defaults);
   },
 
-  set(params: SetParams) {
-    return getInstance().set(params);
+  add(params: AddParams) {
+    return getInstance().add(params);
   },
 
   get(params: GetParams) {
@@ -85,10 +83,6 @@ export const memory = {
 
   remove(params: RemoveParams) {
     return getInstance().remove(params);
-  },
-
-  commit(options: CommitOptions) {
-    return getInstance().commit(options);
   },
 
   list(options?: ListOptions) {

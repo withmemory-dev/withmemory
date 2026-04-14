@@ -70,169 +70,159 @@ export function containersRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
   // ─── POST /containers — create a container ──────────────────────────
-  app.post(
-    "/containers",
-    zValidator("json", CreateContainerSchema, zodErrorHook),
-    async (c) => {
-      const scopeError = requireAdminScope(c);
-      if (scopeError) return c.json(scopeError, 401);
+  app.post("/containers", zValidator("json", CreateContainerSchema, zodErrorHook), async (c) => {
+    const scopeError = requireAdminScope(c);
+    if (scopeError) return c.json(scopeError, 401);
 
-      const db = c.get("db");
-      const account = c.get("account");
-      const { name, metadata } = c.req.valid("json");
+    const db = c.get("db");
+    const account = c.get("account");
+    const { name, metadata } = c.req.valid("json");
 
-      try {
-        requirePlan(account, ["pro", "team", "enterprise"]);
-      } catch (e) {
-        if (e instanceof PlanEnforcementError) return c.json(e.toResponseBody(), 403);
-        throw e;
-      }
+    try {
+      requirePlan(account, ["pro", "team", "enterprise"]);
+    } catch (e) {
+      if (e instanceof PlanEnforcementError) return c.json(e.toResponseBody(), 403);
+      throw e;
+    }
 
-      // Check container limit
-      const limit = CONTAINER_LIMITS[account.planTier] ?? 0;
-      const [countRow] = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(wmAccounts)
-        .where(eq(wmAccounts.parentAccountId, account.id));
-      const current = countRow?.count ?? 0;
+    // Check container limit
+    const limit = CONTAINER_LIMITS[account.planTier] ?? 0;
+    const [countRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(wmAccounts)
+      .where(eq(wmAccounts.parentAccountId, account.id));
+    const current = countRow?.count ?? 0;
 
-      if (current >= limit) {
-        return c.json(
-          {
-            error: {
-              code: "container_limit_exceeded",
-              message: `Container limit reached (${current} / ${limit}). Upgrade to increase your limit.`,
-              details: { current, limit, plan_tier: account.planTier },
-            },
-          },
-          403
-        );
-      }
-
-      // Containers use a generated email to satisfy the NOT NULL unique constraint.
-      const subEmailSuffix = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
-      const subEmail = `sub_${subEmailSuffix}@sub.withmemory.internal`;
-
-      const [container] = await db
-        .insert(wmAccounts)
-        .values({
-          email: subEmail,
-          name,
-          metadata: metadata ?? {},
-          parentAccountId: account.id,
-          planTier: account.planTier,
-          memoryLimit: account.memoryLimit,
-        })
-        .returning();
-
+    if (current >= limit) {
       return c.json(
         {
-          account: {
-            id: container.id,
-            parentAccountId: container.parentAccountId,
-            name: container.name,
-            metadata: container.metadata ?? {},
-            planTier: container.planTier,
-            memoryLimit: container.memoryLimit,
-            createdAt: container.createdAt.toISOString(),
+          error: {
+            code: "container_limit_exceeded",
+            message: `Container limit reached (${current} / ${limit}). Upgrade to increase your limit.`,
+            details: { current, limit, plan_tier: account.planTier },
           },
         },
-        201
+        403
       );
     }
-  );
+
+    // Containers use a generated email to satisfy the NOT NULL unique constraint.
+    const subEmailSuffix = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+    const subEmail = `sub_${subEmailSuffix}@sub.withmemory.internal`;
+
+    const [container] = await db
+      .insert(wmAccounts)
+      .values({
+        email: subEmail,
+        name,
+        metadata: metadata ?? {},
+        parentAccountId: account.id,
+        planTier: account.planTier,
+        memoryLimit: account.memoryLimit,
+      })
+      .returning();
+
+    return c.json(
+      {
+        account: {
+          id: container.id,
+          parentAccountId: container.parentAccountId,
+          name: container.name,
+          metadata: container.metadata ?? {},
+          planTier: container.planTier,
+          memoryLimit: container.memoryLimit,
+          createdAt: container.createdAt.toISOString(),
+        },
+      },
+      201
+    );
+  });
 
   // ─── POST /containers/:id/keys — mint a container key ───────────────
-  app.post(
-    "/containers/:id/keys",
-    zValidator("json", CreateKeySchema, zodErrorHook),
-    async (c) => {
-      const scopeError = requireAdminScope(c);
-      if (scopeError) return c.json(scopeError, 401);
+  app.post("/containers/:id/keys", zValidator("json", CreateKeySchema, zodErrorHook), async (c) => {
+    const scopeError = requireAdminScope(c);
+    if (scopeError) return c.json(scopeError, 401);
 
-      const db = c.get("db");
-      const account = c.get("account");
-      const apiKey = c.get("apiKey");
-      const containerId = c.req.param("id");
-      const { issuedTo, scopes, expiresIn } = c.req.valid("json");
+    const db = c.get("db");
+    const account = c.get("account");
+    const apiKey = c.get("apiKey");
+    const containerId = c.req.param("id");
+    const { issuedTo, scopes, expiresIn } = c.req.valid("json");
 
-      try {
-        requirePlan(account, ["pro", "team", "enterprise"]);
-      } catch (e) {
-        if (e instanceof PlanEnforcementError) return c.json(e.toResponseBody(), 403);
-        throw e;
-      }
+    try {
+      requirePlan(account, ["pro", "team", "enterprise"]);
+    } catch (e) {
+      if (e instanceof PlanEnforcementError) return c.json(e.toResponseBody(), 403);
+      throw e;
+    }
 
-      // Validate scopes: account:admin is not allowed on container keys
-      const resolvedScopes = scopes ?? "memory:read,memory:write";
-      if (resolvedScopes.includes("account:admin")) {
-        return c.json(
-          {
-            error: {
-              code: "invalid_request",
-              message: "Container keys cannot have account:admin scope",
-            },
-          },
-          400
-        );
-      }
-
-      // Verify container exists and belongs to this parent
-      const [container] = await db
-        .select()
-        .from(wmAccounts)
-        .where(
-          and(eq(wmAccounts.id, containerId), eq(wmAccounts.parentAccountId, account.id))
-        )
-        .limit(1);
-
-      if (!container) {
-        return c.json({ error: { code: "not_found", message: "Container not found" } }, 404);
-      }
-
-      // Generate raw key: wm_live_ + base64url(32 random bytes)
-      const randomBuf = new Uint8Array(32);
-      crypto.getRandomValues(randomBuf);
-      const rawRandom = btoa(String.fromCharCode(...randomBuf))
-        .replace(/\+/g, "-")
-        .replace(/\//g, "_")
-        .replace(/=+$/, "");
-      const rawKey = `wm_live_${rawRandom}`;
-      const keyPrefix = rawKey.slice(0, 11);
-      const keyHash = await sha256Hex(rawKey);
-
-      const expiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000) : null;
-
-      const [newKey] = await db
-        .insert(wmApiKeys)
-        .values({
-          accountId: containerId,
-          keyHash,
-          keyPrefix,
-          scopes: resolvedScopes,
-          issuedTo,
-          expiresAt,
-          parentKeyId: apiKey.id,
-        })
-        .returning();
-
+    // Validate scopes: account:admin is not allowed on container keys
+    const resolvedScopes = scopes ?? "memory:read,memory:write";
+    if (resolvedScopes.includes("account:admin")) {
       return c.json(
         {
-          key: {
-            id: newKey.id,
-            accountId: newKey.accountId,
-            keyPrefix: newKey.keyPrefix,
-            scopes: newKey.scopes,
-            issuedTo: newKey.issuedTo,
-            expiresAt: newKey.expiresAt?.toISOString() ?? null,
-            createdAt: newKey.createdAt.toISOString(),
+          error: {
+            code: "invalid_request",
+            message: "Container keys cannot have account:admin scope",
           },
-          rawKey,
         },
-        201
+        400
       );
     }
-  );
+
+    // Verify container exists and belongs to this parent
+    const [container] = await db
+      .select()
+      .from(wmAccounts)
+      .where(and(eq(wmAccounts.id, containerId), eq(wmAccounts.parentAccountId, account.id)))
+      .limit(1);
+
+    if (!container) {
+      return c.json({ error: { code: "not_found", message: "Container not found" } }, 404);
+    }
+
+    // Generate raw key: wm_live_ + base64url(32 random bytes)
+    const randomBuf = new Uint8Array(32);
+    crypto.getRandomValues(randomBuf);
+    const rawRandom = btoa(String.fromCharCode(...randomBuf))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+    const rawKey = `wm_live_${rawRandom}`;
+    const keyPrefix = rawKey.slice(0, 11);
+    const keyHash = await sha256Hex(rawKey);
+
+    const expiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000) : null;
+
+    const [newKey] = await db
+      .insert(wmApiKeys)
+      .values({
+        accountId: containerId,
+        keyHash,
+        keyPrefix,
+        scopes: resolvedScopes,
+        issuedTo,
+        expiresAt,
+        parentKeyId: apiKey.id,
+      })
+      .returning();
+
+    return c.json(
+      {
+        key: {
+          id: newKey.id,
+          accountId: newKey.accountId,
+          keyPrefix: newKey.keyPrefix,
+          scopes: newKey.scopes,
+          issuedTo: newKey.issuedTo,
+          expiresAt: newKey.expiresAt?.toISOString() ?? null,
+          createdAt: newKey.createdAt.toISOString(),
+        },
+        rawKey,
+      },
+      201
+    );
+  });
 
   // ─── GET /containers — list containers ────────────────────────────────
   app.get("/containers", async (c) => {
@@ -297,9 +287,7 @@ export function containersRoute() {
     const [container] = await db
       .select()
       .from(wmAccounts)
-      .where(
-        and(eq(wmAccounts.id, containerId), eq(wmAccounts.parentAccountId, account.id))
-      )
+      .where(and(eq(wmAccounts.id, containerId), eq(wmAccounts.parentAccountId, account.id)))
       .limit(1);
 
     if (!container) {
@@ -310,15 +298,11 @@ export function containersRoute() {
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(wmMemories)
-        .where(
-          and(eq(wmMemories.accountId, containerId), isNull(wmMemories.supersededBy))
-        ),
+        .where(and(eq(wmMemories.accountId, containerId), isNull(wmMemories.supersededBy))),
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(wmApiKeys)
-        .where(
-          and(eq(wmApiKeys.accountId, containerId), isNull(wmApiKeys.revokedAt))
-        ),
+        .where(and(eq(wmApiKeys.accountId, containerId), isNull(wmApiKeys.revokedAt))),
     ]);
 
     return c.json({
@@ -383,9 +367,7 @@ export function containersRoute() {
       const [container] = await db
         .select({ id: wmAccounts.id })
         .from(wmAccounts)
-        .where(
-          and(eq(wmAccounts.id, containerId), eq(wmAccounts.parentAccountId, account.id))
-        )
+        .where(and(eq(wmAccounts.id, containerId), eq(wmAccounts.parentAccountId, account.id)))
         .limit(1);
 
       if (!container) {
@@ -401,5 +383,3 @@ export function containersRoute() {
 
   return app;
 }
-
-

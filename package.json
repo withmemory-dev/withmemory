@@ -14,7 +14,7 @@
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "test:e2e": "tsx examples/plain-ts/test-set-recall.ts"
+    "test:e2e": "tsx examples/plain-ts/test-add-recall.ts"
   },
   "devDependencies": {
     "tsx": "^4.21.0"

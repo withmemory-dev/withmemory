@@ -16,14 +16,14 @@ export interface Memory {
   updatedAt: string;
 }
 
-export interface SetParams {
+export interface AddParams {
   forScope: string;
-  forKey: string;
+  forKey?: string;
   value: string;
 }
 
-export interface SetResponse {
-  memory: Memory;
+export interface AddResponse {
+  memories: Memory[];
 }
 
 export interface GetParams {
@@ -73,12 +73,6 @@ export interface RecallOptions {
   maxItems?: number;
   maxTokens?: number;
   defaults?: Record<string, string>;
-}
-
-export interface CommitOptions {
-  forScope: string;
-  input: string;
-  output: string;
 }
 
 export interface RegisterDefaults {
@@ -180,4 +174,3 @@ export interface DeleteContainerOptions {
 export interface DeleteContainerResponse {
   deleted: boolean;
 }
-

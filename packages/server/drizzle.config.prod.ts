@@ -5,9 +5,7 @@ import type { Config } from "drizzle-kit";
 config({ path: ".env.local" });
 
 if (!process.env.PROD_DIRECT_URL) {
-  throw new Error(
-    "PROD_DIRECT_URL is not set. Add it to packages/server/.env.local"
-  );
+  throw new Error("PROD_DIRECT_URL is not set. Add it to packages/server/.env.local");
 }
 
 export default {

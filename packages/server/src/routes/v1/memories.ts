@@ -134,10 +134,7 @@ export function memoriesRoute() {
       // Escape LIKE wildcards in user input so % and _ are matched literally
       const escaped = search.replace(/[%_\\]/g, "\\$&");
       baseConditions.push(
-        or(
-          ilike(wmMemories.key, `%${escaped}%`),
-          ilike(wmMemories.content, `%${escaped}%`)
-        )!
+        or(ilike(wmMemories.key, `%${escaped}%`), ilike(wmMemories.content, `%${escaped}%`))!
       );
     }
 
@@ -166,29 +163,20 @@ export function memoriesRoute() {
     if (cursor) {
       const decoded = decodeCursor(cursor);
       if (!decoded) {
-        return c.json(
-          { error: { code: "invalid_request", message: "Invalid cursor" } },
-          400
-        );
+        return c.json({ error: { code: "invalid_request", message: "Invalid cursor" } }, 400);
       }
 
       if (decoded.v === null) {
         // Cursor row had a null value — continue within the null group
         if (orderDir === "desc") {
-          mainConditions.push(
-            sql`(${col} IS NULL AND ${wmMemories.id} < ${decoded.id}::uuid)`
-          );
+          mainConditions.push(sql`(${col} IS NULL AND ${wmMemories.id} < ${decoded.id}::uuid)`);
         } else {
-          mainConditions.push(
-            sql`(${col} IS NULL AND ${wmMemories.id} > ${decoded.id}::uuid)`
-          );
+          mainConditions.push(sql`(${col} IS NULL AND ${wmMemories.id} > ${decoded.id}::uuid)`);
         }
       } else {
         // Cast the cursor value to the column's Postgres type
         const cv =
-          orderBy === "importance"
-            ? sql`${decoded.v}::real`
-            : sql`${decoded.v}::timestamptz`;
+          orderBy === "importance" ? sql`${decoded.v}::real` : sql`${decoded.v}::timestamptz`;
 
         // Keyset pagination: continue past the cursor position.
         // NULLS LAST means null values come after all non-nulls regardless

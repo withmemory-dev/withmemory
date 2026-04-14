@@ -21,17 +21,17 @@ const userMessage = "What stack should I use for my new project?";
 
 // ── Step 1: Store facts about the user ────────────────────────────────────────
 
-console.log("\n1. Setting memories...\n");
+console.log("\n1. Adding memories...\n");
 
-const nameResult = await memory.set({ value: "Andrew", forKey: "name", forScope });
-console.log(`   set name → ${nameResult.memory.value}`);
+const nameResult = await memory.add({ value: "Andrew", forKey: "name", forScope });
+console.log(`   add name → ${nameResult.memories[0].value}`);
 
-const stackResult = await memory.set({
+const stackResult = await memory.add({
   value: "TypeScript, Next.js, Cloudflare Workers",
   forKey: "tech_stack",
   forScope,
 });
-console.log(`   set tech_stack → ${stackResult.memory.value}`);
+console.log(`   add tech_stack → ${stackResult.memories[0].value}`);
 
 // ── Step 2: Recall memories with a user query ─────────────────────────────────
 
@@ -76,19 +76,18 @@ const stackCheck = await memory.get({ forScope, forKey: "tech_stack" });
 console.log(`   get name → ${nameCheck.memory?.value ?? "(not found)"}`);
 console.log(`   get tech_stack → ${stackCheck.memory?.value ?? "(not found)"}`);
 
-// ── Step 5: Commit the conversation for async extraction ──────────────────────
+// ── Step 5: Store a conversation turn via extraction ─────────────────────────
 
-console.log("\n5. Committing conversation for async extraction...\n");
+console.log("\n5. Adding conversation for extraction...\n");
 
 const reply =
   llmResponse ?? "I'd recommend sticking with your current stack since you already know it well.";
 
-await memory.commit({
+const extractionResult = await memory.add({
   forScope,
-  input: userMessage,
-  output: reply,
+  value: `User: ${userMessage}\nAssistant: ${reply}`,
 });
 
-console.log("   Committed — fire-and-forget, never throws.\n");
+console.log(`   Extracted ${extractionResult.memories.length} memories from conversation.\n`);
 
 console.log("Done.\n");

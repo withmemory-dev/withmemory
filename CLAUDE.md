@@ -4,7 +4,7 @@ This file is the primary orientation document for AI assistants working on WithM
 
 ## The product in one paragraph
 
-WithMemory is a persistent memory layer for AI agents. Developers integrate it with two API calls: `memory.set({ forScope, forKey, value })` to store facts explicitly, and `memory.recall({ forScope, query })` to retrieve context before every LLM invocation. A third call, `memory.commit({ forScope, input, output })`, runs async LLM extraction to derive durable facts from conversation turns. The output of `recall()` is a rigid contract: a `context` string under 150 tokens containing at most 4 items, safe to prepend to any system prompt. WithMemory is configuration-free by default, TypeScript-native, and self-hostable on any Postgres database.
+WithMemory is a persistent memory layer for AI agents. Developers integrate it with two API calls: `memory.add({ forScope, value })` to store facts (optionally with an explicit `forKey` to bypass LLM extraction), and `memory.recall({ forScope, query })` to retrieve a prompt-ready context block before every LLM invocation. The output of `recall()` is a rigid contract: a `context` string under 150 tokens containing at most 4 items, safe to prepend to any system prompt. WithMemory is configuration-free by default, TypeScript-native, and self-hostable on any Postgres database.
 
 ## Design principles
 
@@ -59,7 +59,7 @@ These are rules that should not be changed without an explicit architectural dis
 - Drizzle schema exports: camelCase (e.g., `wmMemories`)
 - TypeScript types: PascalCase (e.g., `WmMemory`, `NewWmMemory`)
 - Route files: kebab-case (e.g., `api-keys.ts`)
-- SDK methods: camelCase, verb-first (e.g., `set`, `recall`, `commit`, `getUserMemories`)
+- SDK methods: camelCase, verb-first (e.g., `add`, `recall`, `get`, `remove`)
 
 **File organization:**
 - Route handlers go in `packages/server/src/routes/` (once created)
@@ -81,12 +81,11 @@ packages/server/
 │   │   └── client.ts         # createDb() factory, runtime-agnostic
 │   ├── routes/v1/
 │   │   ├── index.ts          # v1 route aggregator + catch-all 404
-│   │   ├── set.ts            # POST /v1/set
-│   │   ├── get.ts            # POST /v1/get
+│   │   ├── add.ts            # POST /v1/memories (explicit + extraction)
+│   │   ├── get.ts            # POST /v1/memories/get
 │   │   ├── recall.ts         # POST /v1/recall (with defaults support)
-│   │   ├── remove.ts         # POST /v1/remove
-│   │   ├── commit.ts         # POST /v1/commit (extraction pipeline)
-│   │   ├── memories.ts       # POST /v1/memories + DELETE /v1/memories/:id
+│   │   ├── remove.ts         # POST /v1/memories/remove
+│   │   ├── memories.ts       # POST /v1/memories/list + DELETE /v1/memories/:id
 │   │   ├── health.ts         # GET /v1/health
 │   │   └── account.ts        # POST/GET/DELETE /v1/account/extraction-prompt
 │   ├── middleware/
@@ -95,6 +94,7 @@ packages/server/
 │       ├── hash.ts           # SHA-256 Web Crypto helper
 │       ├── end-users.ts      # ensureEndUser() shared upsert helper
 │       ├── extraction.ts     # LLM extraction + embedding via OpenAI
+│       ├── add-with-extraction.ts # Extraction pipeline helper for add route
 │       ├── extraction-prompt.txt  # Bundled extraction prompt (text module)
 │       └── text-modules.d.ts # TypeScript declaration for .txt imports
 ├── docs/
@@ -168,18 +168,18 @@ The server API, TypeScript SDK, and extraction pipeline are functional. All `/v1
 
 What exists:
 - Monorepo structure with pnpm workspaces
-- `packages/server` with Hono, Drizzle, API key auth middleware, and eleven live `/v1/*` routes (`set`, `get`, `recall`, `remove`, `health`, `commit`, `memories`, `memories/:id`, `account/extraction-prompt` POST/GET/DELETE). A catch-all 404 handler on the v1 sub-app returns the standard `{ error: { code, message } }` envelope for unknown routes.
-- `packages/sdk` (`@withmemory/sdk`) — TypeScript SDK with dual ESM/CJS output via tsup, zero runtime dependencies. Exports a `memory` singleton and a `createClient()` factory. All 13 methods are live (10 original + `setExtractionPrompt`, `getExtractionPrompt`, `resetExtractionPrompt`). `register()` stores defaults and forwards them to `recall()`. See `packages/sdk/API.md` for the canonical contract.
+- `packages/server` with Hono, Drizzle, API key auth middleware, and live `/v1/*` routes (`memories` (add), `memories/get`, `memories/remove`, `memories/list`, `memories/:id`, `recall`, `health`, `account/extraction-prompt` POST/GET/DELETE). A catch-all 404 handler on the v1 sub-app returns the standard `{ error: { code, message } }` envelope for unknown routes.
+- `packages/sdk` (`@withmemory/sdk`) — TypeScript SDK with dual ESM/CJS output via tsup, zero runtime dependencies. Exports a `memory` singleton and a `createClient()` factory. Core methods: `add` (explicit + extraction), `get`, `recall`, `remove`, `list`, `deleteMemory`, `health`, plus extraction prompt CRUD and containers namespace. `register()` stores defaults and forwards them to `recall()`. See `packages/sdk/API.md` for the canonical contract.
 - Database schema for five tables (`wm_accounts`, `wm_api_keys`, `wm_end_users`, `wm_exchanges`, `wm_memories`) applied to local. `wm_accounts.extraction_prompt` (nullable text) supports customer-configurable extraction prompts.
-- `wm_exchanges` table stores conversation turns from `commit()` with extraction status tracking
+- `wm_exchanges` table stores extraction audit trail for `add()` calls without `forKey`
 - `wm_memories.exchange_id` FK links extracted memories to their source exchange
 - LLM extraction library (`packages/server/src/lib/extraction.ts`) using direct OpenAI fetch (gpt-4.1-mini for extraction, text-embedding-3-small at 512 dimensions for embeddings)
-- `POST /v1/commit` returns 202 immediately, runs extraction async via `waitUntil`, supports Idempotency-Key header
+- `POST /v1/memories` handles both explicit writes (with `forKey`) and synchronous extraction (without `forKey`), supports Idempotency-Key header on extraction path
 - `register()` defaults wired through `recall()` as tier 4 fallback — appears in `context` only, not in the `memories` array
 - `WorkerEnv` type centralized in `packages/server/src/types.ts` — all env vars declared once
 - `ensureEndUser()` helper shared across `set.ts` and `commit.ts`
 - API key authentication middleware (SHA-256 hash, Bearer token, `last_used_at` updated via `ctx.waitUntil`)
-- E2E test suite: 34 tests covering all routes plus auth, validation, idempotency, defaults, SDK register() → recall() flow, extraction prompt CRUD, and cross-account ownership — passing against local
+- E2E test suite covering all routes plus auth, validation, idempotency, extraction, defaults, SDK register() → recall() flow, extraction prompt CRUD, and cross-account ownership — passing against local
 - `packages/eval/` — extraction eval harness with 12 labeled fixtures and quality scoring
 - `examples/vercel-ai-sdk/` — integration example demonstrating set → recall → LLM call → commit against `api.withmemory.dev`
 - Local development environment via Supabase CLI + Docker

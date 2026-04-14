@@ -51,10 +51,7 @@ export type DedupAction =
  * Pure function: no DB access, no side effects. The caller is responsible
  * for executing the returned action.
  */
-export function classifyFact(
-  newFact: NewFact,
-  existingMemories: ExistingMemory[]
-): DedupAction {
+export function classifyFact(newFact: NewFact, existingMemories: ExistingMemory[]): DedupAction {
   if (existingMemories.length === 0) {
     return { type: "insert" };
   }

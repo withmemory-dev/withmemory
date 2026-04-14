@@ -85,10 +85,7 @@ interface FixtureResult {
   error: string | null;
 }
 
-function scoreResult(
-  fixture: RecallFixture,
-  topKIds: number[]
-): Omit<FixtureResult, "error"> {
+function scoreResult(fixture: RecallFixture, topKIds: number[]): Omit<FixtureResult, "error"> {
   const { mustInclude, mustExclude } = fixture.expected;
 
   // Recall: fraction of mustInclude items present in top-K
@@ -106,9 +103,7 @@ function scoreResult(
   }
 
   // mustExclude violations
-  const violations = mustExclude
-    ? topKIds.filter((idx) => mustExclude.includes(idx)).length
-    : 0;
+  const violations = mustExclude ? topKIds.filter((idx) => mustExclude.includes(idx)).length : 0;
 
   const pass = recall === 1.0 && violations === 0;
 
@@ -117,10 +112,7 @@ function scoreResult(
 
 // ─── Per-fixture evaluation ─────────────────────────────────────────────────
 
-async function evaluateFixture(
-  fixture: RecallFixture,
-  now: Date
-): Promise<FixtureResult> {
+async function evaluateFixture(fixture: RecallFixture, now: Date): Promise<FixtureResult> {
   const topK = fixture.expected.topK ?? 4;
   const isNullEmbeddingFixture = fixture.tags?.includes("null_embedding") ?? false;
 
@@ -169,9 +161,7 @@ async function evaluateFixture(
 
   if (BASELINE_MODE) {
     // Baseline: sort by updatedAt DESC (most recent first), slice top-K
-    const sorted = [...candidates].sort(
-      (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
-    );
+    const sorted = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     ranked = sorted.slice(0, topK);
   } else {
     // Semantic ranking via the real rankMemories function
@@ -237,13 +227,9 @@ async function main() {
   const passRate = results.length > 0 ? totalPass / results.length : 0;
 
   const avgPrecision =
-    results.length > 0
-      ? results.reduce((sum, r) => sum + r.precision, 0) / results.length
-      : 0;
+    results.length > 0 ? results.reduce((sum, r) => sum + r.precision, 0) / results.length : 0;
   const avgRecall =
-    results.length > 0
-      ? results.reduce((sum, r) => sum + r.recall, 0) / results.length
-      : 0;
+    results.length > 0 ? results.reduce((sum, r) => sum + r.recall, 0) / results.length : 0;
 
   // MRR: for each fixture, find the rank of the first mustInclude item
   let mrrSum = 0;
@@ -268,7 +254,9 @@ async function main() {
   if (!BASELINE_MODE) {
     console.log(`  similarity_floor:  ${SIMILARITY_FLOOR}`);
   }
-  console.log(`  pass_rate:         ${totalPass}/${results.length} (${(passRate * 100).toFixed(1)}%)`);
+  console.log(
+    `  pass_rate:         ${totalPass}/${results.length} (${(passRate * 100).toFixed(1)}%)`
+  );
   console.log(`  avg_precision:     ${(avgPrecision * 100).toFixed(1)}%`);
   console.log(`  avg_recall:        ${(avgRecall * 100).toFixed(1)}%`);
   console.log(`  mrr:               ${mrr.toFixed(3)}`);

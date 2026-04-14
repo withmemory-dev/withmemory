@@ -2,7 +2,7 @@
 
 ## What the extraction prompt does
 
-The extraction prompt is the system prompt sent to the LLM during `/v1/commit`. It receives a conversation turn (user input + assistant output) and decides which durable facts, if any, to extract as persistent memories.
+The extraction prompt is the system prompt sent to the LLM during `POST /v1/memories` (extraction path, when `forKey` is omitted). It receives text about a user and decides which durable facts, if any, to extract as persistent memories.
 
 ## Design philosophy
 

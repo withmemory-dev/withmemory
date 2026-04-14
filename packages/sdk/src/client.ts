@@ -1,8 +1,8 @@
 import { WithMemoryError } from "./errors";
 import type {
   WithMemoryConfig,
-  SetParams,
-  SetResponse,
+  AddParams,
+  AddResponse,
   GetParams,
   GetResponse,
   RecallResponse,
@@ -10,7 +10,6 @@ import type {
   RemoveResponse,
   HealthResponse,
   RecallOptions,
-  CommitOptions,
   RegisterDefaults,
   ExtractionPromptResponse,
   ResetExtractionPromptResponse,
@@ -48,16 +47,17 @@ export class WithMemoryClient {
     this.registeredDefaults = { ...defaults };
   }
 
-  async set(params: SetParams): Promise<SetResponse> {
-    return this.request<SetResponse>("POST", "/v1/set", {
+  async add(params: AddParams): Promise<AddResponse> {
+    const body: Record<string, unknown> = {
       forScope: params.forScope,
-      forKey: params.forKey,
       value: params.value,
-    });
+    };
+    if (params.forKey !== undefined) body.forKey = params.forKey;
+    return this.request<AddResponse>("POST", "/v1/memories", body);
   }
 
   async get(params: GetParams): Promise<GetResponse> {
-    return this.request<GetResponse>("POST", "/v1/get", {
+    return this.request<GetResponse>("POST", "/v1/memories/get", {
       forScope: params.forScope,
       forKey: params.forKey,
     });
@@ -79,25 +79,10 @@ export class WithMemoryClient {
   }
 
   async remove(params: RemoveParams): Promise<RemoveResponse> {
-    return this.request<RemoveResponse>("POST", "/v1/remove", {
+    return this.request<RemoveResponse>("POST", "/v1/memories/remove", {
       forScope: params.forScope,
       forKey: params.forKey,
     });
-  }
-
-  async commit(options: CommitOptions): Promise<void> {
-    try {
-      await this.request<void>("POST", "/v1/commit", {
-        forScope: options.forScope,
-        input: options.input,
-        output: options.output,
-      });
-    } catch (err: unknown) {
-      console.warn(
-        "[@withmemory/sdk] commit() failed silently:",
-        err instanceof Error ? err.message : err
-      );
-    }
   }
 
   async list(options?: ListOptions): Promise<ListResponse> {
@@ -126,25 +111,17 @@ export class WithMemoryClient {
   }
 
   async setExtractionPrompt(prompt: string): Promise<ExtractionPromptResponse> {
-    return this.request<ExtractionPromptResponse>(
-      "POST",
-      "/v1/account/extraction-prompt",
-      { prompt }
-    );
+    return this.request<ExtractionPromptResponse>("POST", "/v1/account/extraction-prompt", {
+      prompt,
+    });
   }
 
   async getExtractionPrompt(): Promise<ExtractionPromptResponse> {
-    return this.request<ExtractionPromptResponse>(
-      "GET",
-      "/v1/account/extraction-prompt"
-    );
+    return this.request<ExtractionPromptResponse>("GET", "/v1/account/extraction-prompt");
   }
 
   async resetExtractionPrompt(): Promise<ResetExtractionPromptResponse> {
-    return this.request<ResetExtractionPromptResponse>(
-      "DELETE",
-      "/v1/account/extraction-prompt"
-    );
+    return this.request<ResetExtractionPromptResponse>("DELETE", "/v1/account/extraction-prompt");
   }
 
   // ─── Containers namespace ────────────────────────────────────────────────
@@ -167,10 +144,7 @@ export class WithMemoryClient {
     },
 
     get: (options: GetContainerOptions): Promise<GetContainerResponse> => {
-      return this.request<GetContainerResponse>(
-        "GET",
-        `/v1/containers/${options.forContainer}`
-      );
+      return this.request<GetContainerResponse>("GET", `/v1/containers/${options.forContainer}`);
     },
 
     revokeKey: (options: RevokeContainerKeyOptions): Promise<RevokeContainerKeyResponse> => {
@@ -207,7 +181,11 @@ export class WithMemoryClient {
       });
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === "AbortError") {
-        throw new WithMemoryError(0, "timeout", `Request to ${path} timed out after ${this.timeout}ms`);
+        throw new WithMemoryError(
+          0,
+          "timeout",
+          `Request to ${path} timed out after ${this.timeout}ms`
+        );
       }
       const message = err instanceof Error ? err.message : "Network request failed";
       throw new WithMemoryError(0, "network_error", message);
@@ -218,7 +196,7 @@ export class WithMemoryClient {
     if (!response.ok) {
       let errorBody: { error?: { code?: string; message?: string; details?: unknown } };
       try {
-        errorBody = await response.json() as typeof errorBody;
+        errorBody = (await response.json()) as typeof errorBody;
       } catch {
         throw new WithMemoryError(
           response.status,

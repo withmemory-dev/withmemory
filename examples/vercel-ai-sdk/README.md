@@ -5,10 +5,10 @@ Demonstrates the `@withmemory/sdk` integration pattern with the Vercel AI SDK in
 ## What this demonstrates
 
 - Configuring the SDK singleton with `memory.configure()`
-- Storing explicit facts with `memory.set()` and retrieving them with `memory.get()`
+- Storing explicit facts with `memory.add()` and retrieving them with `memory.get()`
 - Retrieving a `context` string with `memory.recall()`
 - Prepending memory context to an LLM system message via the Vercel AI SDK
-- Fire-and-forget conversation commit with `memory.commit()`
+- Extracting facts from a conversation turn with `memory.add()` (no `forKey`)
 
 ## How to run
 
@@ -32,10 +32,10 @@ pnpm --filter @withmemory/example-vercel-ai-sdk start
 ## Expected output
 
 ```
-1. Setting memories...
+1. Adding memories...
 
-   set name → Andrew
-   set tech_stack → TypeScript, Next.js, Cloudflare Workers
+   add name → Andrew
+   add tech_stack → TypeScript, Next.js, Cloudflare Workers
 
 2. Recalling memories...
 
@@ -57,15 +57,11 @@ pnpm --filter @withmemory/example-vercel-ai-sdk start
    get name → Andrew
    get tech_stack → TypeScript, Next.js, Cloudflare Workers
 
-5. Committing conversation for async extraction...
+5. Adding conversation for extraction...
 
-   Committed — fire-and-forget, never throws.
+   Extracted N memories from conversation.
 
 Done.
 ```
 
 If `OPENAI_API_KEY` is not set, step 3 prints a skip message and the example still completes successfully.
-
-## About the commit() contract
-
-`commit()` is fire-and-forget: it posts to `/v1/commit`, returns 202 immediately, and never throws. Extraction runs asynchronously on the server. If the endpoint is unreachable, you'll see a warning like `[@withmemory/sdk] commit() failed silently: ...` — the example still completes successfully.

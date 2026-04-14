@@ -37,7 +37,11 @@ export async function checkMemoryQuota(
   if (account.parentAccountId) {
     // This is a sub-account — look up the parent for its limit
     const [parent] = await db
-      .select({ id: wmAccounts.id, memoryLimit: wmAccounts.memoryLimit, planTier: wmAccounts.planTier })
+      .select({
+        id: wmAccounts.id,
+        memoryLimit: wmAccounts.memoryLimit,
+        planTier: wmAccounts.planTier,
+      })
       .from(wmAccounts)
       .where(eq(wmAccounts.id, account.parentAccountId))
       .limit(1);

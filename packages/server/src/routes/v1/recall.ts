@@ -7,11 +7,7 @@ import * as schema from "../../db/schema";
 import { SCOPE_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { embedQuery, EMBEDDING_DIMENSIONS } from "../../lib/embeddings";
-import {
-  rankMemories,
-  type RankableMemory,
-  type RankingWeights,
-} from "../../lib/ranking";
+import { rankMemories, type RankableMemory, type RankingWeights } from "../../lib/ranking";
 
 const { wmEndUsers, wmMemories } = schema;
 
@@ -105,16 +101,15 @@ function mapRawRowToRankable(row: RawEmbeddedRow): RankableMemory {
     id: row.id,
     content: row.content,
     source: row.source,
-    importance: typeof row.importance === "string" ? Number.parseFloat(row.importance) : row.importance,
+    importance:
+      typeof row.importance === "string" ? Number.parseFloat(row.importance) : row.importance,
     embedding: parseVectorLiteral(row.embedding),
     createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
     updatedAt: row.updated_at instanceof Date ? row.updated_at : new Date(row.updated_at),
   };
 }
 
-function mapDrizzleRowToRankable(
-  row: typeof wmMemories.$inferSelect
-): RankableMemory {
+function mapDrizzleRowToRankable(row: typeof wmMemories.$inferSelect): RankableMemory {
   return {
     id: row.id,
     content: row.content,
@@ -153,8 +148,7 @@ export function recallRoute() {
   app.post("/recall", validator, async (c) => {
     const db = c.get("db");
     const account = c.get("account");
-    const { forScope, query, maxItems, maxTokens, defaults } =
-      c.req.valid("json");
+    const { forScope, query, maxItems, maxTokens, defaults } = c.req.valid("json");
 
     const resolvedMaxItems = maxItems ?? 4;
     const resolvedMaxTokens = maxTokens ?? 150;
@@ -164,12 +158,7 @@ export function recallRoute() {
     const [endUser] = await db
       .select()
       .from(wmEndUsers)
-      .where(
-        and(
-          eq(wmEndUsers.accountId, account.id),
-          eq(wmEndUsers.externalId, forScope)
-        )
-      )
+      .where(and(eq(wmEndUsers.accountId, account.id), eq(wmEndUsers.externalId, forScope)))
       .limit(1);
 
     // ─── Step 2: user_not_found early return ──────────────────────────────
@@ -306,17 +295,9 @@ export function recallRoute() {
     // because similarity weight is 0) and the fallback weights.
     const rankingInputEmbedding: number[] =
       queryEmbedding ?? new Array(EMBEDDING_DIMENSIONS).fill(0);
-    const weights =
-      strategy === "semantic"
-        ? { similarityFloor: 0.2 }
-        : FALLBACK_WEIGHTS;
+    const weights = strategy === "semantic" ? { similarityFloor: 0.2 } : FALLBACK_WEIGHTS;
 
-    const ranked = rankMemories(
-      candidates,
-      rankingInputEmbedding,
-      weights,
-      new Date()
-    );
+    const ranked = rankMemories(candidates, rankingInputEmbedding, weights, new Date());
 
     // ─── Step 6: Top-K slice ──────────────────────────────────────────────
     const topK = ranked.slice(0, resolvedMaxItems);

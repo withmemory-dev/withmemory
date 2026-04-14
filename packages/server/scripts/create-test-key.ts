@@ -65,22 +65,16 @@ const { email, useProd } = parseArgs(process.argv);
 
 // ─── Database URL selection ──────────────────────────────────────────────────
 
-const databaseUrl = useProd
-  ? process.env.PROD_DIRECT_URL
-  : process.env.DATABASE_URL;
+const databaseUrl = useProd ? process.env.PROD_DIRECT_URL : process.env.DATABASE_URL;
 
 if (!databaseUrl) {
   if (useProd) {
-    console.error(
-      "ERROR: PROD_DIRECT_URL is not set. Check packages/server/.env.local."
-    );
+    console.error("ERROR: PROD_DIRECT_URL is not set. Check packages/server/.env.local.");
     console.error(
       "       This should be the direct (port 5432) Supabase connection, not the pooler."
     );
   } else {
-    console.error(
-      "ERROR: DATABASE_URL is not set. Check packages/server/.env.local."
-    );
+    console.error("ERROR: DATABASE_URL is not set. Check packages/server/.env.local.");
   }
   process.exit(1);
 }
@@ -98,21 +92,14 @@ async function main() {
 
   try {
     // Find or create account for the provided email
-    const existing = await db
-      .select()
-      .from(wmAccounts)
-      .where(eq(wmAccounts.email, email))
-      .limit(1);
+    const existing = await db.select().from(wmAccounts).where(eq(wmAccounts.email, email)).limit(1);
 
     let account;
     let accountWasCreated = false;
     if (existing.length > 0) {
       account = existing[0];
     } else {
-      const inserted = await db
-        .insert(wmAccounts)
-        .values({ email })
-        .returning();
+      const inserted = await db.insert(wmAccounts).values({ email }).returning();
       account = inserted[0];
       accountWasCreated = true;
     }

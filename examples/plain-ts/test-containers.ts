@@ -110,7 +110,10 @@ tests.push({
     // Account A starts on free tier (default)
     const res = await apiCall("POST", "/v1/containers", { name: "should-fail" });
     assert(res.status === 403, `expected 403, got ${res.status}`);
-    assert(res.body.error.code === "plan_required", `expected plan_required, got ${res.body.error.code}`);
+    assert(
+      res.body.error.code === "plan_required",
+      `expected plan_required, got ${res.body.error.code}`
+    );
   },
 });
 
@@ -152,8 +155,14 @@ tests.push({
       res.body.error.code === "container_limit_exceeded",
       `expected container_limit_exceeded, got ${res.body.error.code}`
     );
-    assert(res.body.error.details.current === 10, `expected current=10, got ${res.body.error.details.current}`);
-    assert(res.body.error.details.limit === 10, `expected limit=10, got ${res.body.error.details.limit}`);
+    assert(
+      res.body.error.details.current === 10,
+      `expected current=10, got ${res.body.error.details.current}`
+    );
+    assert(
+      res.body.error.details.limit === 10,
+      `expected limit=10, got ${res.body.error.details.limit}`
+    );
   },
 });
 
@@ -190,7 +199,10 @@ tests.push({
       scopes: "memory:read,account:admin",
     });
     assert(res.status === 400, `expected 400, got ${res.status}`);
-    assert(res.body.error.code === "invalid_request", `expected invalid_request, got ${res.body.error.code}`);
+    assert(
+      res.body.error.code === "invalid_request",
+      `expected invalid_request, got ${res.body.error.code}`
+    );
   },
 });
 
@@ -200,17 +212,22 @@ tests.push({
 tests.push({
   name: "Container key stores memory on the container, not the parent",
   fn: async () => {
-    const res = await apiCall("POST", "/v1/set", {
-      forScope: "agent-user-1",
-      forKey: "preference",
-      value: "dark-mode",
-    }, { key: containerRawKey });
+    const res = await apiCall(
+      "POST",
+      "/v1/memories",
+      {
+        forScope: "agent-user-1",
+        forKey: "preference",
+        value: "dark-mode",
+      },
+      { key: containerRawKey }
+    );
     assert(res.status === 200, `expected 200, got ${res.status}`);
-    assert(res.body.memory.value === "dark-mode", "value mismatch");
+    assert(res.body.memories[0].value === "dark-mode", "value mismatch");
 
     // Verify in DB that the memory is on the container
     const rows = await testDb`
-      SELECT account_id FROM wm_memories WHERE id = ${res.body.memory.id}
+      SELECT account_id FROM wm_memories WHERE id = ${res.body.memories[0].id}
     `;
     assert(rows.length === 1, "memory not found in DB");
     assert(rows[0].account_id === containerId, "memory stored on wrong account");
@@ -223,9 +240,14 @@ tests.push({
 tests.push({
   name: "Container key (memory:read,memory:write) cannot call /v1/containers (401)",
   fn: async () => {
-    const res = await apiCall("POST", "/v1/containers", { name: "nope" }, {
-      key: containerRawKey,
-    });
+    const res = await apiCall(
+      "POST",
+      "/v1/containers",
+      { name: "nope" },
+      {
+        key: containerRawKey,
+      }
+    );
     assert(res.status === 401, `expected 401, got ${res.status}`);
     assert(
       res.body.error.code === "unauthorized",
@@ -255,21 +277,34 @@ tests.push({
     await updateAccount(accountIdA, { memory_limit: currentTotal + 1 });
 
     // One more write should succeed
-    const res2 = await apiCall("POST", "/v1/set", {
-      forScope: "agent-user-1",
-      forKey: "k2",
-      value: "v2",
-    }, { key: containerRawKey });
+    const res2 = await apiCall(
+      "POST",
+      "/v1/memories",
+      {
+        forScope: "agent-user-1",
+        forKey: "k2",
+        value: "v2",
+      },
+      { key: containerRawKey }
+    );
     assert(res2.status === 200, `write at limit-1: expected 200, got ${res2.status}`);
 
     // Next write should fail (quota exceeded)
-    const res3 = await apiCall("POST", "/v1/set", {
-      forScope: "agent-user-1",
-      forKey: "k3",
-      value: "v3",
-    }, { key: containerRawKey });
+    const res3 = await apiCall(
+      "POST",
+      "/v1/memories",
+      {
+        forScope: "agent-user-1",
+        forKey: "k3",
+        value: "v3",
+      },
+      { key: containerRawKey }
+    );
     assert(res3.status === 403, `write at limit: expected 403, got ${res3.status}`);
-    assert(res3.body.error.code === "quota_exceeded", `expected quota_exceeded, got ${res3.body.error.code}`);
+    assert(
+      res3.body.error.code === "quota_exceeded",
+      `expected quota_exceeded, got ${res3.body.error.code}`
+    );
 
     // Restore limit
     await updateAccount(accountIdA, { memory_limit: 1000 });
@@ -285,7 +320,10 @@ tests.push({
     const res = await apiCall("GET", "/v1/containers", undefined);
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.total === 10, `expected total=10, got ${res.body.total}`);
-    assert(res.body.accounts.length === 10, `expected 10 accounts, got ${res.body.accounts.length}`);
+    assert(
+      res.body.accounts.length === 10,
+      `expected 10 accounts, got ${res.body.accounts.length}`
+    );
     // The first container should have 2 memories from the quota test
     const first = res.body.accounts.find((a: any) => a.id === containerId);
     assert(first !== undefined, "container not found in list");
@@ -303,8 +341,14 @@ tests.push({
     const res = await apiCall("GET", `/v1/containers/${containerId}`, undefined);
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.account.id === containerId, "id mismatch");
-    assert(res.body.account.memoryCount === 2, `expected memoryCount=2, got ${res.body.account.memoryCount}`);
-    assert(res.body.account.activeKeyCount === 1, `expected activeKeyCount=1, got ${res.body.account.activeKeyCount}`);
+    assert(
+      res.body.account.memoryCount === 2,
+      `expected memoryCount=2, got ${res.body.account.memoryCount}`
+    );
+    assert(
+      res.body.account.activeKeyCount === 1,
+      `expected activeKeyCount=1, got ${res.body.account.activeKeyCount}`
+    );
     assert(res.body.account.name === "agent-alpha", `expected name, got ${res.body.account.name}`);
     assert(res.body.account.metadata.purpose === "testing", "metadata missing");
   },
@@ -333,9 +377,14 @@ tests.push({
 tests.push({
   name: "Cross-account isolation: account B cannot DELETE account A's container (404)",
   fn: async () => {
-    const res = await apiCall("DELETE", `/v1/containers/${containerId}`, { confirm: true }, {
-      key: API_KEY_B,
-    });
+    const res = await apiCall(
+      "DELETE",
+      `/v1/containers/${containerId}`,
+      { confirm: true },
+      {
+        key: API_KEY_B,
+      }
+    );
     assert(res.status === 404, `expected 404, got ${res.status}`);
   },
 });
@@ -374,7 +423,10 @@ tests.push({
     // Subsequent call with revoked key should fail
     const res = await apiCall("GET", "/v1/health", undefined, { key: containerRawKey });
     assert(res.status === 401, `expected 401, got ${res.status}`);
-    assert(res.body.error.code === "unauthorized", `expected unauthorized, got ${res.body.error.code}`);
+    assert(
+      res.body.error.code === "unauthorized",
+      `expected unauthorized, got ${res.body.error.code}`
+    );
   },
 });
 
@@ -386,7 +438,10 @@ tests.push({
   fn: async () => {
     const res = await apiCall("DELETE", `/v1/containers/${containerId}`, { confirm: false });
     assert(res.status === 400, `expected 400, got ${res.status}`);
-    assert(res.body.error.code === "invalid_request", `expected invalid_request, got ${res.body.error.code}`);
+    assert(
+      res.body.error.code === "invalid_request",
+      `expected invalid_request, got ${res.body.error.code}`
+    );
   },
 });
 

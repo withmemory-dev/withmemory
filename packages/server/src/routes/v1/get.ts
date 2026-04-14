@@ -19,7 +19,7 @@ const validator = zValidator("json", GetRequestSchema, zodErrorHook);
 export function getRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
-  app.post("/get", validator, async (c) => {
+  app.post("/memories/get", validator, async (c) => {
     const db = c.get("db");
     const account = c.get("account");
     const { forScope, forKey } = c.req.valid("json");

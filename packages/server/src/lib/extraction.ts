@@ -3,17 +3,12 @@ import { embedTexts } from "./embeddings";
 /**
  * LLM extraction and embedding generation via direct OpenAI API calls.
  *
- * This module is the shared core imported by both /v1/commit and the eval
+ * This module is the shared core imported by both the add route and the eval
  * harness. It never touches the database — callers are responsible for
  * persisting results.
  */
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-
-export interface ExtractionInput {
-  input: string;
-  output: string;
-}
 
 export interface ExtractedMemory {
   content: string;
@@ -32,7 +27,7 @@ export async function runExtraction(params: {
   openaiApiKey: string;
   prompt: string;
   promptVersion: string;
-  input: ExtractionInput;
+  input: string;
 }): Promise<ExtractionResult> {
   const { openaiApiKey, prompt, promptVersion, input } = params;
 
@@ -80,9 +75,9 @@ export async function runExtraction(params: {
 async function callExtraction(
   apiKey: string,
   systemPrompt: string,
-  input: ExtractionInput
+  input: string
 ): Promise<string[]> {
-  const userMessage = `<input>\n${input.input}\n</input>\n\n<output>\n${input.output}\n</output>`;
+  const userMessage = input;
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",

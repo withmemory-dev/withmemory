@@ -9,7 +9,7 @@ import { memory } from "@withmemory/sdk";
 
 memory.configure({ apiKey: "wm_..." });
 
-await memory.set({
+await memory.add({
   value: "Andrew",
   forKey: "name",
   forScope: "user_alice"
@@ -64,6 +64,7 @@ class WithMemoryError extends Error {
 | `plan_required` | Server | 403 | Feature requires a higher plan tier |
 | `container_limit_exceeded` | Server | 403 | Account has reached its container cap |
 | `confirmation_required` | Server | 400 | Destructive action requires `{ confirm: true }` in body |
+| `extraction_failed` | Server | 500 | LLM extraction pipeline failed (extraction path only) |
 | `timeout` | SDK | 0 | Request exceeded the configured timeout |
 | `network_error` | SDK | 0 | Fetch failed (DNS, connection refused, TLS, offline, etc.) |
 
@@ -71,7 +72,7 @@ class WithMemoryError extends Error {
 
 ### Memory
 
-The canonical memory object returned by `set`, `get`, `recall`, and list operations:
+The canonical memory object returned by `add`, `get`, `recall`, and list operations:
 
 ```ts
 interface Memory {
@@ -86,6 +87,16 @@ interface Memory {
   updatedAt: string;       // ISO 8601
 }
 ```
+
+### AddResponse
+
+```ts
+interface AddResponse {
+  memories: Memory[];
+}
+```
+
+Explicit mode (`forKey` provided) always returns an array of length 1. Extraction mode (`forKey` omitted) may return 0, 1, or several memories depending on what the extraction identifies.
 
 ### RecallResponse
 
@@ -106,10 +117,9 @@ The `ranking` field describes how the returned memories were ordered:
 - **`"recency_importance"`** — the query embedding could not be generated, so memories were ranked by recency and importance only. The `reason` field is `"embedding_unavailable"`.
 - **`"user_not_found"`** — the requested `forScope` does not exist under the authenticated account. The `memories` array is empty. The `context` may still contain registered defaults.
 
-### SetResponse / GetResponse / RemoveResponse / HealthResponse
+### GetResponse / RemoveResponse / HealthResponse
 
 ```ts
-interface SetResponse { memory: Memory; }
 interface GetResponse { memory: Memory | null; }
 interface RemoveResponse { deleted: boolean; }
 interface HealthResponse { status: "ok"; version: string; }
@@ -157,11 +167,10 @@ interface ResetExtractionPromptResponse {
 |--------|------|---------|-------------------|
 | `configure(config)` | — | `void` | Yes |
 | `register(defaults)` | — | `void` | Yes |
-| `set({ forScope, forKey, value })` | `POST /v1/set` | `SetResponse` | Yes |
-| `get({ forScope, forKey })` | `POST /v1/get` | `GetResponse` | Yes |
+| `add({ forScope, forKey?, value })` | `POST /v1/memories` | `AddResponse` | Yes |
+| `get({ forScope, forKey })` | `POST /v1/memories/get` | `GetResponse` | Yes |
 | `recall({ forScope, query, ... })` | `POST /v1/recall` | `RecallResponse` | Yes |
-| `remove({ forScope, forKey })` | `POST /v1/remove` | `RemoveResponse` | Yes |
-| `commit({ forScope, input, output })` | `POST /v1/commit` | `void` | **Never** |
+| `remove({ forScope, forKey })` | `POST /v1/memories/remove` | `RemoveResponse` | Yes |
 | `list(options?)` | `POST /v1/memories/list` | `ListResponse` | Yes |
 | `deleteMemory(memoryId)` | `DELETE /v1/memories/:id` | `RemoveResponse` | Yes |
 | `health()` | `GET /v1/health` | `HealthResponse` | Yes |
@@ -169,9 +178,27 @@ interface ResetExtractionPromptResponse {
 | `getExtractionPrompt()` | `GET /v1/account/extraction-prompt` | `ExtractionPromptResponse` | Yes |
 | `resetExtractionPrompt()` | `DELETE /v1/account/extraction-prompt` | `ResetExtractionPromptResponse` | Yes |
 
-**`register(defaults)`** stores defaults on the client instance. Defaults are forwarded in the `recall()` request body as a `defaults` field and appear in the `context` as tier 4 fallback (after explicit, extracted, and summary memories). Defaults do NOT appear in the `memories` array — they are prompt-block-only.
+### memory.add
 
-**`commit()` is fire-and-forget.** It catches all errors internally and never throws. The server returns 202 immediately and runs extraction asynchronously. Supports an `Idempotency-Key` header (max 255 chars).
+`memory.add` is the primary method for storing memories. It has two modes based on whether `forKey` is provided:
+
+**Explicit mode — direct write:**
+```ts
+await memory.add({ forScope: "alice", forKey: "name", value: "Andrew" });
+```
+Writes the value directly under the given key. No LLM call. Returns the written memory in a single-element array.
+
+**Extraction mode — LLM-derived facts:**
+```ts
+await memory.add({ forScope: "alice", value: "The user's name is Andrew and they prefer dark mode" });
+```
+Runs LLM extraction on the value and stores any facts the extraction identifies. The method is synchronous — it waits for extraction and embedding to complete before returning. Returns all extracted memories (may be zero if extraction identifies no durable facts).
+
+Both modes return the same response shape: `{ memories: Memory[] }`. Explicit mode always returns an array of length 1. Extraction mode may return 0, 1, or several memories depending on what the extraction identifies.
+
+The extraction path respects the account's custom extraction prompt if one is set via `memory.setExtractionPrompt()`.
+
+**`register(defaults)`** stores defaults on the client instance. Defaults are forwarded in the `recall()` request body as a `defaults` field and appear in the `context` as tier 4 fallback (after explicit, extracted, and summary memories). Defaults do NOT appear in the `memories` array — they are prompt-block-only.
 
 **`recall()` accepts optional `defaults`** — a `Record<string, string>` of key-value pairs to include in the context when real memories don't fill the budget. Per-call defaults merge with (and override) any defaults set via `register()`. Only memories with `status: "ready"` are returned.
 
@@ -235,7 +262,7 @@ interface ContainerKey {
 | Scope | Grants |
 |-------|--------|
 | `memory:read` | `get`, `recall`, `list`, `health` |
-| `memory:write` | `set`, `remove`, `commit`, `deleteMemory` |
+| `memory:write` | `add`, `remove`, `deleteMemory` |
 | `account:admin` | Container management endpoints, extraction prompt CRUD |
 
 ### Key expiry

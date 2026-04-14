@@ -57,16 +57,9 @@ function assertEqual<T>(actual: T, expected: T, label: string): void {
   }
 }
 
-function assertClose(
-  actual: number,
-  expected: number,
-  tolerance: number,
-  label: string
-): void {
+function assertClose(actual: number, expected: number, tolerance: number, label: string): void {
   if (Math.abs(actual - expected) > tolerance) {
-    throw new Error(
-      `${label}: expected ~${expected} (±${tolerance}), got ${actual}`
-    );
+    throw new Error(`${label}: expected ~${expected} (±${tolerance}), got ${actual}`);
   }
 }
 
@@ -86,10 +79,7 @@ function daysAgo(n: number): Date {
   return new Date(NOW.getTime() - n * 24 * 60 * 60 * 1000);
 }
 
-function mem(
-  id: string,
-  overrides: Partial<RankableMemory> = {}
-): RankableMemory {
+function mem(id: string, overrides: Partial<RankableMemory> = {}): RankableMemory {
   return {
     id,
     content: `memory ${id}`,
@@ -124,12 +114,7 @@ test("opposite vectors return -1.0", () => {
 
 test("scaled parallel vectors return 1.0 (scale-invariance)", () => {
   assertClose(cosineSimilarity([1, 2, 3, 4], [2, 4, 6, 8]), 1.0, 1e-9, "2x scale");
-  assertClose(
-    cosineSimilarity([1, 2, 3, 4], [0.1, 0.2, 0.3, 0.4]),
-    1.0,
-    1e-9,
-    "0.1x scale"
-  );
+  assertClose(cosineSimilarity([1, 2, 3, 4], [0.1, 0.2, 0.3, 0.4]), 1.0, 1e-9, "0.1x scale");
 });
 
 test("zero vector returns 0.0 (no division by zero)", () => {
@@ -337,22 +322,13 @@ test("similarity-only weights change order vs defaults", () => {
   );
 
   // Under similarity-only, "best" must come first (perfect match beats partial)
-  assertEqual(
-    similarityOnlyRanked[0].id,
-    "best",
-    "similarity-only: best first"
-  );
+  assertEqual(similarityOnlyRanked[0].id, "best", "similarity-only: best first");
   // Under defaults, the ordering depends on the relative decay vs similarity
   // gap — the assertion we can make safely is that the two orderings are
   // different OR that the score ratios are different. We check scores differ.
-  const defaultScoreRatio =
-    defaultRanked[0].score / defaultRanked[1].score;
-  const simOnlyScoreRatio =
-    similarityOnlyRanked[0].score / similarityOnlyRanked[1].score;
-  assertTrue(
-    defaultScoreRatio !== simOnlyScoreRatio,
-    "weight changes affect ratios"
-  );
+  const defaultScoreRatio = defaultRanked[0].score / defaultRanked[1].score;
+  const simOnlyScoreRatio = similarityOnlyRanked[0].score / similarityOnlyRanked[1].score;
+  assertTrue(defaultScoreRatio !== simOnlyScoreRatio, "weight changes affect ratios");
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -513,8 +489,18 @@ test("components are populated for every returned memory", () => {
 test("score matches components × weights formula", () => {
   const query = [1, 0, 0, 0];
   const candidates = [
-    mem("a", { embedding: [1, 0, 0, 0], updatedAt: daysAgo(15), source: "explicit", importance: 0.7 }),
-    mem("b", { embedding: [0, 1, 0, 0], updatedAt: daysAgo(3), source: "extracted", importance: 0.3 }),
+    mem("a", {
+      embedding: [1, 0, 0, 0],
+      updatedAt: daysAgo(15),
+      source: "explicit",
+      importance: 0.7,
+    }),
+    mem("b", {
+      embedding: [0, 1, 0, 0],
+      updatedAt: daysAgo(3),
+      source: "extracted",
+      importance: 0.3,
+    }),
   ];
   const ranked = rankMemories(candidates, query, undefined, NOW);
   const w = DEFAULT_RANKING_WEIGHTS;

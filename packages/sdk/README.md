@@ -20,7 +20,7 @@ import { memory } from "@withmemory/sdk";
 memory.configure({ apiKey: "wm_..." });
 
 // Store a fact
-await memory.set({
+await memory.add({
   value: "Prefers dark mode",
   forKey: "ui_preference",
   forScope: "user_123"

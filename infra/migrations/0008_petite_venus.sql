@@ -1,0 +1,1 @@
+ALTER TABLE "wm_exchanges" DROP COLUMN "output";

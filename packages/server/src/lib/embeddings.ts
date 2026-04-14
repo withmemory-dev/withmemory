@@ -47,10 +47,7 @@ export const EMBEDDING_MODEL = "text-embedding-3-small";
  * the extraction pipeline prefers to persist memories without embeddings
  * rather than drop them entirely.
  */
-export async function embedTexts(
-  apiKey: string,
-  texts: string[]
-): Promise<(number[] | null)[]> {
+export async function embedTexts(apiKey: string, texts: string[]): Promise<(number[] | null)[]> {
   if (texts.length === 0) {
     return [];
   }
@@ -70,9 +67,7 @@ export async function embedTexts(
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    throw new Error(
-      `OpenAI embeddings API returned ${response.status}: ${text.slice(0, 200)}`
-    );
+    throw new Error(`OpenAI embeddings API returned ${response.status}: ${text.slice(0, 200)}`);
   }
 
   const body = (await response.json()) as {
@@ -87,10 +82,7 @@ export async function embedTexts(
   const sorted = [...body.data].sort((a, b) => a.index - b.index);
 
   return sorted.map((item) => {
-    if (
-      !Array.isArray(item.embedding) ||
-      item.embedding.length !== EMBEDDING_DIMENSIONS
-    ) {
+    if (!Array.isArray(item.embedding) || item.embedding.length !== EMBEDDING_DIMENSIONS) {
       return null;
     }
     return item.embedding;
@@ -107,10 +99,7 @@ export async function embedTexts(
  * The recall route catches this and falls back to non-semantic ranking,
  * so the thrown error is the signal that triggers the fallback path.
  */
-export async function embedQuery(
-  apiKey: string,
-  text: string
-): Promise<number[]> {
+export async function embedQuery(apiKey: string, text: string): Promise<number[]> {
   const results = await embedTexts(apiKey, [text]);
   const embedding = results[0];
   if (!embedding) {

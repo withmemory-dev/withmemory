@@ -46,10 +46,7 @@ export function authMiddleware(db: Db) {
       .limit(1);
 
     if (result.length === 0) {
-      return c.json(
-        { error: { code: "unauthorized", message: "Invalid API key" } },
-        401
-      );
+      return c.json({ error: { code: "unauthorized", message: "Invalid API key" } }, 401);
     }
 
     const { apiKey, account } = result[0];
@@ -57,10 +54,7 @@ export function authMiddleware(db: Db) {
     // Check key expiry — expired keys return a distinct error code so
     // agents can distinguish "key expired" from "key invalid"
     if (apiKey.expiresAt && apiKey.expiresAt.getTime() <= Date.now()) {
-      return c.json(
-        { error: { code: "key_expired", message: "API key has expired" } },
-        401
-      );
+      return c.json({ error: { code: "key_expired", message: "API key has expired" } }, 401);
     }
 
     c.set("account", account);

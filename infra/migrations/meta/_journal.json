@@ -57,6 +57,13 @@
       "when": 1776168620953,
       "tag": "0007_add_memory_status",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1776180539577,
+      "tag": "0008_petite_venus",
+      "breakpoints": true
     }
   ]
 }

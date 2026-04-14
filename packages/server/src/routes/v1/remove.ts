@@ -19,7 +19,7 @@ const validator = zValidator("json", RemoveRequestSchema, zodErrorHook);
 export function removeRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
-  app.post("/remove", validator, async (c) => {
+  app.post("/memories/remove", validator, async (c) => {
     const db = c.get("db");
     const account = c.get("account");
     const { forScope, forKey } = c.req.valid("json");

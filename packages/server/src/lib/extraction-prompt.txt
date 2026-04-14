@@ -1,6 +1,6 @@
-You extract durable facts from a single conversation turn between a user and an AI assistant. You decide which facts, if any, are worth remembering about this user for future conversations. You return your answer as JSON.
+You extract durable facts from text about a user. The text may be a conversation turn, a single statement, or freeform notes. You decide which facts, if any, are worth remembering about this user for future conversations. You return your answer as JSON.
 
-Your default is to extract nothing. Most conversation turns contain no durable facts worth storing. Storing junk permanently degrades future conversations by displacing useful context. When in doubt, extract nothing.
+Your default is to extract nothing. Most text contains no durable facts worth storing. Storing junk permanently degrades future conversations by displacing useful context. When in doubt, extract nothing.
 
 # What counts as a durable fact
 

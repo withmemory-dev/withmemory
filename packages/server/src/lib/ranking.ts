@@ -90,9 +90,7 @@ export type ScoredMemory = RankableMemory & {
  */
 export function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length) {
-    throw new Error(
-      `cosineSimilarity: vector length mismatch (${a.length} vs ${b.length})`
-    );
+    throw new Error(`cosineSimilarity: vector length mismatch (${a.length} vs ${b.length})`);
   }
   if (a.length === 0) {
     return 0;
@@ -125,11 +123,7 @@ export function cosineSimilarity(a: number[], b: number[]): number {
  * are clamped to 1.0 — this shouldn't happen in practice but prevents
  * clock-skew or fixture-seeding edge cases from producing scores > 1.
  */
-export function recencyScore(
-  updatedAt: Date,
-  now: Date,
-  halfLifeDays: number
-): number {
+export function recencyScore(updatedAt: Date, now: Date, halfLifeDays: number): number {
   const msPerDay = 1000 * 60 * 60 * 24;
   const ageDays = Math.max(0, (now.getTime() - updatedAt.getTime()) / msPerDay);
   const ln2 = Math.log(2);
@@ -208,8 +202,7 @@ export function rankMemories(
     const tier = mem.source === "explicit" ? w.tierExplicit : w.tierExtracted;
 
     // Weighted sum, then tier multiplier.
-    const weightedSum =
-      w.similarity * similarity + w.recency * recency + w.importance * importance;
+    const weightedSum = w.similarity * similarity + w.recency * recency + w.importance * importance;
     const score = tier * weightedSum;
 
     return {

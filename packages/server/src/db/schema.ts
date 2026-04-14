@@ -70,9 +70,7 @@ export const wmAccounts = pgTable(
     // NULL = top-level (parent-eligible) account. ON DELETE CASCADE
     // removes all containers when the parent is deleted.
     parentAccountId: uuid("parent_account_id"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
     parentAccountIdIdx: index("wm_accounts_parent_account_id_idx").on(table.parentAccountId),
@@ -104,9 +102,7 @@ export const wmApiKeys = pgTable(
     // Self-referencing FK: keys minted via sub-accounts API point to the minting key.
     // ON DELETE SET NULL so revoking a parent key doesn't cascade to sub-account keys.
     parentKeyId: uuid("parent_key_id"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   },
   (table) => ({
@@ -173,9 +169,7 @@ export const wmEndUsers = pgTable(
       .notNull()
       .references(() => wmAccounts.id, { onDelete: "cascade" }),
     externalId: text("external_id").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
     uniqueAccountExternal: unique("wm_end_users_account_external_unique").on(
@@ -186,7 +180,7 @@ export const wmEndUsers = pgTable(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// wm_exchanges — conversation turns submitted via commit()
+// wm_exchanges — extraction audit trail for add() without forKey
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const wmExchanges = pgTable(
@@ -200,7 +194,6 @@ export const wmExchanges = pgTable(
       .notNull()
       .references(() => wmEndUsers.id, { onDelete: "cascade" }),
     input: text("input").notNull(),
-    output: text("output").notNull(),
     idempotencyKey: text("idempotency_key"),
     promptVersion: text("prompt_version"),
     extractionStatus: text("extraction_status", {
@@ -209,9 +202,7 @@ export const wmExchanges = pgTable(
       .notNull()
       .default("pending"),
     extractionError: text("extraction_error"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     extractionCompletedAt: timestamp("extraction_completed_at", {
       withTimezone: true,
     }),
@@ -224,9 +215,7 @@ export const wmExchanges = pgTable(
       table.createdAt
     ),
     // Reconciliation jobs filtering by extraction status
-    extractionStatusIdx: index("wm_exchanges_extraction_status_idx").on(
-      table.extractionStatus
-    ),
+    extractionStatusIdx: index("wm_exchanges_extraction_status_idx").on(table.extractionStatus),
     // Partial unique index on (account_id, idempotency_key) WHERE idempotency_key IS NOT NULL
     // — Drizzle cannot declare partial indexes, so this is added manually in the migration SQL
   })
@@ -257,9 +246,7 @@ export const wmMemories = pgTable(
     exchangeId: uuid("exchange_id").references(() => wmExchanges.id, {
       onDelete: "set null",
     }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow()
@@ -267,8 +254,8 @@ export const wmMemories = pgTable(
     lastRecalledAt: timestamp("last_recalled_at", { withTimezone: true }),
     supersededBy: uuid("superseded_by"),
     // Pipeline state visibility: tracks whether the memory is ready for recall.
-    // Explicit set() memories start as 'ready'. Extracted memories from commit()
-    // start as 'pending' and transition to 'ready' or 'failed'.
+    // Explicit add() memories start as 'ready'. Extracted memories also start
+    // as 'ready' since extraction is synchronous in the add route.
     status: text("status", { enum: ["ready", "pending", "failed"] })
       .notNull()
       .default("ready"),
@@ -296,10 +283,7 @@ export const wmMemories = pgTable(
       table.id
     ),
     // Recall efficiency: filter to ready memories per account
-    accountStatusIdx: index("wm_memories_account_status_idx").on(
-      table.accountId,
-      table.status
-    ),
+    accountStatusIdx: index("wm_memories_account_status_idx").on(table.accountId, table.status),
     // pgvector HNSW index for similarity search — created via raw SQL in migration
     // because Drizzle doesn't generate HNSW index syntax automatically
   })
