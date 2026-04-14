@@ -27,7 +27,7 @@ export function getRoute() {
     const endUser = await findEndUser(db, account.id, forScope);
 
     if (!endUser) {
-      return c.json({ memory: null });
+      return c.json({ memory: null, request_id: c.get("requestId") });
     }
 
     const [memory] = await db
@@ -44,7 +44,7 @@ export function getRoute() {
       .limit(1);
 
     if (!memory) {
-      return c.json({ memory: null });
+      return c.json({ memory: null, request_id: c.get("requestId") });
     }
 
     return c.json({
@@ -59,6 +59,7 @@ export function getRoute() {
         createdAt: memory.createdAt.toISOString(),
         updatedAt: memory.updatedAt.toISOString(),
       },
+      request_id: c.get("requestId"),
     });
   });
 

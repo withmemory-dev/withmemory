@@ -27,7 +27,7 @@ export function removeRoute() {
     const endUser = await findEndUser(db, account.id, forScope);
 
     if (!endUser) {
-      return c.json({ deleted: false });
+      return c.json({ deleted: false, request_id: c.get("requestId") });
     }
 
     const result = await db
@@ -41,7 +41,7 @@ export function removeRoute() {
       )
       .returning({ id: wmMemories.id });
 
-    return c.json({ deleted: result.length > 0 });
+    return c.json({ deleted: result.length > 0, request_id: c.get("requestId") });
   });
 
   return app;

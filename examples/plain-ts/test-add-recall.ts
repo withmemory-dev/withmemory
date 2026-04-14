@@ -110,6 +110,10 @@ tests.push({
     const res = await apiCall("/v1/memories", { forScope, forKey: "name", value: "Andrew" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memories.length === 1, `expected 1 memory, got ${res.body.memories.length}`);
+    assert(
+      typeof res.body.request_id === "string" && res.body.request_id.length > 0,
+      `expected request_id in response body, got "${res.body.request_id}"`
+    );
     const mem = res.body.memories[0];
     assert(mem.source === "explicit", `expected source "explicit"`);
     assert(mem.forKey === "name", `expected key "name"`);
@@ -152,6 +156,10 @@ tests.push({
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memories.length === 3, `expected 3 memories, got ${res.body.memories.length}`);
     assert(res.body.context.length > 0, "expected non-empty context");
+    assert(
+      typeof res.body.request_id === "string" && res.body.request_id.length > 0,
+      `expected request_id in recall response`
+    );
     assert(res.body.context.includes("name: Andrew"), `context missing "name: Andrew"`);
     assert(res.body.context.includes("role: engineer"), `context missing "role: engineer"`);
     assert(res.body.context.includes("subscription: pro"), `context missing "subscription: pro"`);

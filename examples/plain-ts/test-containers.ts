@@ -133,6 +133,10 @@ tests.push({
     assert(res.body.account.name === "agent-alpha", "name mismatch");
     assert(res.body.account.metadata.purpose === "testing", "metadata mismatch");
     assert(res.body.account.planTier === "pro", "planTier should inherit");
+    assert(
+      typeof res.body.request_id === "string" && res.body.request_id.length > 0,
+      `expected request_id in response body`
+    );
     containerId = res.body.account.id;
   },
 });

@@ -36,6 +36,7 @@ export interface AddParams {
 
 export interface AddResponse {
   memories: Memory[];
+  request_id?: string;
 }
 
 export interface GetParams {
@@ -45,6 +46,7 @@ export interface GetParams {
 
 export interface GetResponse {
   memory: Memory | null;
+  request_id?: string;
 }
 
 export interface RemoveParams {
@@ -59,24 +61,29 @@ export interface RecallResponse {
     strategy: "semantic" | "recency_importance" | "user_not_found";
     reason?: "embedding_unavailable";
   };
+  request_id?: string;
 }
 
 export interface ExtractionPromptResponse {
   prompt: string | null;
   source: "custom" | "default";
+  request_id?: string;
 }
 
 export interface ResetExtractionPromptResponse {
   reset: boolean;
+  request_id?: string;
 }
 
 export interface RemoveResponse {
   deleted: boolean;
+  request_id?: string;
 }
 
 export interface HealthResponse {
   status: "ok";
   version: string;
+  request_id?: string;
 }
 
 export interface RecallOptions {
@@ -108,6 +115,7 @@ export interface ListResponse {
   memories: Memory[];
   nextCursor: string | null;
   total?: number;
+  request_id?: string;
 }
 
 // ─── Containers ──────────────────────────────────────────────────────────
@@ -148,16 +156,19 @@ export interface CreateContainerKeyOptions {
 
 export interface CreateContainerResponse {
   account: Container;
+  request_id?: string;
 }
 
 export interface CreateContainerKeyResponse {
   key: ContainerKey;
   rawKey: string;
+  request_id?: string;
 }
 
 export interface ListContainersResponse {
   accounts: Container[];
   total: number;
+  request_id?: string;
 }
 
 export interface GetContainerOptions {
@@ -166,6 +177,7 @@ export interface GetContainerOptions {
 
 export interface GetContainerResponse {
   account: Container;
+  request_id?: string;
 }
 
 export interface RevokeContainerKeyOptions {
@@ -176,6 +188,7 @@ export interface RevokeContainerKeyOptions {
 export interface RevokeContainerKeyResponse {
   revoked: boolean;
   revokedAt: string;
+  request_id?: string;
 }
 
 export interface DeleteContainerOptions {
@@ -185,4 +198,5 @@ export interface DeleteContainerOptions {
 
 export interface DeleteContainerResponse {
   deleted: boolean;
+  request_id?: string;
 }

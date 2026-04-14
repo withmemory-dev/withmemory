@@ -44,7 +44,7 @@ export function accountRoute() {
       .set({ extractionPrompt: prompt })
       .where(eq(wmAccounts.id, account.id));
 
-    return c.json({ prompt, source: "custom" });
+    return c.json({ prompt, source: "custom", request_id: c.get("requestId") });
   });
 
   // GET /account/extraction-prompt — read current prompt state
@@ -52,10 +52,14 @@ export function accountRoute() {
     const account = c.get("account");
 
     if (account.extractionPrompt) {
-      return c.json({ prompt: account.extractionPrompt, source: "custom" });
+      return c.json({
+        prompt: account.extractionPrompt,
+        source: "custom",
+        request_id: c.get("requestId"),
+      });
     }
 
-    return c.json({ prompt: null, source: "default" });
+    return c.json({ prompt: null, source: "default", request_id: c.get("requestId") });
   });
 
   // DELETE /account/extraction-prompt — reset to default
@@ -68,7 +72,7 @@ export function accountRoute() {
       .set({ extractionPrompt: null })
       .where(eq(wmAccounts.id, account.id));
 
-    return c.json({ reset: true });
+    return c.json({ reset: true, request_id: c.get("requestId") });
   });
 
   return app;

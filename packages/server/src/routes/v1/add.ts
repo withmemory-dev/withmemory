@@ -94,6 +94,7 @@ export function addRoute() {
             updatedAt: memory.updatedAt.toISOString(),
           },
         ],
+        request_id: c.get("requestId"),
       });
     } else {
       // Extraction path: synchronous LLM extraction
@@ -134,7 +135,7 @@ export function addRoute() {
           },
           forScope
         );
-        return c.json({ memories });
+        return c.json({ memories, request_id: c.get("requestId") });
       } catch (err) {
         if (err instanceof ExtractionError) {
           return c.json(

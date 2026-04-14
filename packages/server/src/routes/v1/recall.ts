@@ -180,6 +180,7 @@ export function recallRoute() {
         context: defaultLines.join("\n"),
         memories: [],
         ranking,
+        request_id: c.get("requestId"),
       });
     }
 
@@ -347,6 +348,7 @@ export function recallRoute() {
         updatedAt: m.updatedAt.toISOString(),
       })),
       ranking,
+      request_id: c.get("requestId"),
     });
   });
 

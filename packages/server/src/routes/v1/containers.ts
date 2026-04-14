@@ -138,6 +138,7 @@ export function containersRoute() {
           memoryLimit: container.memoryLimit,
           createdAt: container.createdAt.toISOString(),
         },
+        request_id: c.get("requestId"),
       },
       201
     );
@@ -238,6 +239,7 @@ export function containersRoute() {
           createdAt: newKey.createdAt.toISOString(),
         },
         rawKey,
+        request_id: c.get("requestId"),
       },
       201
     );
@@ -288,6 +290,7 @@ export function containersRoute() {
         createdAt: ct.createdAt.toISOString(),
       })),
       total: containers.length,
+      request_id: c.get("requestId"),
     });
   });
 
@@ -351,6 +354,7 @@ export function containersRoute() {
         activeKeyCount: keyRow?.count ?? 0,
         createdAt: container.createdAt.toISOString(),
       },
+      request_id: c.get("requestId"),
     });
   });
 
@@ -388,7 +392,7 @@ export function containersRoute() {
     const now = new Date();
     await db.update(wmApiKeys).set({ revokedAt: now }).where(eq(wmApiKeys.id, keyId));
 
-    return c.json({ revoked: true, revokedAt: now.toISOString() });
+    return c.json({ revoked: true, revokedAt: now.toISOString(), request_id: c.get("requestId") });
   });
 
   // ─── DELETE /containers/:id — delete a container ──────────────────────
@@ -425,7 +429,7 @@ export function containersRoute() {
       // FK CASCADE handles memories, end users, keys
       await db.delete(wmAccounts).where(eq(wmAccounts.id, containerId));
 
-      return c.json({ deleted: true });
+      return c.json({ deleted: true, request_id: c.get("requestId") });
     }
   );
 

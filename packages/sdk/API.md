@@ -154,7 +154,11 @@ Three health endpoints serve different purposes:
 
 ### Request IDs
 
-Every response includes an `X-Request-Id` header. Error responses also include `request_id` in the error envelope body. To thread your own tracing ID, pass `X-Request-Id` in the request headers.
+Every API response — both successful and error — includes a `request_id` field in the response body. The same value is also returned in the `X-Request-Id` response header. Use this ID when reporting bugs or when correlating client-side logs with server-side traces.
+
+You can pass your own `X-Request-Id` header in the request to thread a tracing ID through the API. If you do, the same value will be returned in both the response body and the response header.
+
+On errors, `request_id` appears inside the `error` envelope. On success, it appears as a top-level sibling of the response data.
 
 ## Types
 
@@ -181,6 +185,7 @@ interface Memory {
 ```ts
 interface AddResponse {
   memories: Memory[];
+  request_id?: string;
 }
 ```
 
@@ -196,6 +201,7 @@ interface RecallResponse {
     strategy: "semantic" | "recency_importance" | "user_not_found";
     reason?: "embedding_unavailable";
   };
+  request_id?: string;
 }
 ```
 
@@ -208,9 +214,9 @@ The `ranking` field describes how the returned memories were ordered:
 ### GetResponse / RemoveResponse / HealthResponse
 
 ```ts
-interface GetResponse { memory: Memory | null; }
-interface RemoveResponse { deleted: boolean; }
-interface HealthResponse { status: "ok"; version: string; }
+interface GetResponse { memory: Memory | null; request_id?: string; }
+interface RemoveResponse { deleted: boolean; request_id?: string; }
+interface HealthResponse { status: "ok"; version: string; request_id?: string; }
 ```
 
 ### ListOptions / ListResponse
@@ -233,6 +239,7 @@ interface ListResponse {
   memories: Memory[];
   nextCursor: string | null;
   total?: number;
+  request_id?: string;
 }
 ```
 
@@ -242,10 +249,12 @@ interface ListResponse {
 interface ExtractionPromptResponse {
   prompt: string | null;
   source: "custom" | "default";
+  request_id?: string;
 }
 
 interface ResetExtractionPromptResponse {
   reset: boolean;
+  request_id?: string;
 }
 ```
 

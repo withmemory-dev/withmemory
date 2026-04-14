@@ -111,6 +111,7 @@ export function memoriesRoute() {
           memories: [],
           nextCursor: null,
           ...(includeTotal ? { total: 0 } : {}),
+          request_id: c.get("requestId"),
         });
       }
       endUserId = endUser.id;
@@ -257,6 +258,7 @@ export function memoriesRoute() {
       memories,
       nextCursor,
       ...(includeTotal ? { total } : {}),
+      request_id: c.get("requestId"),
     });
   });
 
@@ -284,7 +286,7 @@ export function memoriesRoute() {
       .where(and(eq(wmMemories.id, memoryId), eq(wmMemories.accountId, account.id)))
       .returning({ id: wmMemories.id });
 
-    return c.json({ deleted: result.length > 0 });
+    return c.json({ deleted: result.length > 0, request_id: c.get("requestId") });
   });
 
   return app;
