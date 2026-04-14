@@ -268,6 +268,13 @@ export const wmMemories = pgTable(
       .$onUpdate(() => new Date()),
     lastRecalledAt: timestamp("last_recalled_at", { withTimezone: true }),
     supersededBy: uuid("superseded_by"),
+    // Pipeline state visibility: tracks whether the memory is ready for recall.
+    // Explicit set() memories start as 'ready'. Extracted memories from commit()
+    // start as 'pending' and transition to 'ready' or 'failed'.
+    status: text("status", { enum: ["ready", "pending", "failed"] })
+      .notNull()
+      .default("ready"),
+    statusError: text("status_error"),
   },
   (table) => ({
     // Enforce upsert semantics for explicit set: same (account, user, key) overwrites
@@ -289,6 +296,11 @@ export const wmMemories = pgTable(
       table.accountId,
       table.updatedAt,
       table.id
+    ),
+    // Recall efficiency: filter to ready memories per account
+    accountStatusIdx: index("wm_memories_account_status_idx").on(
+      table.accountId,
+      table.status
     ),
     // pgvector HNSW index for similarity search — created via raw SQL in migration
     // because Drizzle doesn't generate HNSW index syntax automatically

@@ -73,6 +73,8 @@ export function getRoute() {
         forKey: memory.key,
         value: memory.content,
         source: memory.source,
+        status: memory.status,
+        statusError: memory.statusError,
         createdAt: memory.createdAt.toISOString(),
         updatedAt: memory.updatedAt.toISOString(),
       },

@@ -241,6 +241,8 @@ export function memoriesRoute() {
         key: wmMemories.key,
         content: wmMemories.content,
         source: wmMemories.source,
+        status: wmMemories.status,
+        statusError: wmMemories.statusError,
         importance: wmMemories.importance,
         lastRecalledAt: wmMemories.lastRecalledAt,
         createdAt: wmMemories.createdAt,
@@ -270,6 +272,8 @@ export function memoriesRoute() {
       forKey: r.key,
       value: r.content,
       source: r.source as "explicit" | "extracted",
+      status: r.status,
+      statusError: r.statusError,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     }));

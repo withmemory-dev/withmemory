@@ -266,6 +266,7 @@ export function recallRoute() {
           AND end_user_id = ${endUser.id}
           AND embedding IS NOT NULL
           AND superseded_by IS NULL
+          AND status = 'ready'
         ORDER BY embedding <=> ${queryVectorLiteral}::vector
         LIMIT ${poolSize};
       `);
@@ -281,7 +282,8 @@ export function recallRoute() {
             eq(wmMemories.accountId, account.id),
             eq(wmMemories.endUserId, endUser.id),
             isNull(wmMemories.embedding),
-            isNull(wmMemories.supersededBy)
+            isNull(wmMemories.supersededBy),
+            eq(wmMemories.status, "ready")
           )
         );
 
@@ -296,7 +298,7 @@ export function recallRoute() {
         ...nullEmbeddingRows.map(mapDrizzleRowToRankable),
       ];
     } else {
-      // Fallback path: single-stage fetch of all non-superseded memories
+      // Fallback path: single-stage fetch of all non-superseded ready memories
       // regardless of embedding status. Query C.
       const allRows = await db
         .select()
@@ -305,7 +307,8 @@ export function recallRoute() {
           and(
             eq(wmMemories.accountId, account.id),
             eq(wmMemories.endUserId, endUser.id),
-            isNull(wmMemories.supersededBy)
+            isNull(wmMemories.supersededBy),
+            eq(wmMemories.status, "ready")
           )
         );
 
@@ -375,6 +378,8 @@ export function recallRoute() {
         forKey: keyMap.get(m.id) ?? null,
         value: m.content,
         source: m.source,
+        status: "ready" as const,
+        statusError: null,
         createdAt: m.createdAt.toISOString(),
         updatedAt: m.updatedAt.toISOString(),
       })),

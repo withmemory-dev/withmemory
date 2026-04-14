@@ -10,6 +10,8 @@ export interface Memory {
   forKey: string | null;
   value: string;
   source: "explicit" | "extracted";
+  status: "ready" | "pending" | "failed";
+  statusError: string | null;
   createdAt: string;
   updatedAt: string;
 }

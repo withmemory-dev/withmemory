@@ -50,6 +50,13 @@
       "when": 1776089723966,
       "tag": "0006_illegal_sue_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1776168620953,
+      "tag": "0007_add_memory_status",
+      "breakpoints": true
     }
   ]
 }
