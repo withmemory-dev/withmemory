@@ -2,12 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import * as schema from "../../db/schema";
-import {
-  SCOPE_MAX_LENGTH,
-  zodErrorHook,
-  normalizeParams,
-  setDeprecationHeader,
-} from "../../lib/validation";
+import { SCOPE_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { ensureEndUser } from "../../lib/end-users";
 import { embedTexts } from "../../lib/embeddings";
@@ -15,38 +10,21 @@ import { checkMemoryQuota, PlanEnforcementError } from "../../lib/plan-enforceme
 
 const { wmMemories } = schema;
 
-// Accept both old (userId, key) and new (forScope, forKey) parameter names
 const SetRequestSchema = z.object({
   forScope: z.string().min(1).max(SCOPE_MAX_LENGTH),
   forKey: z.string().min(1).max(128),
   value: z.string().min(1).max(4096),
 });
 
+const validator = zValidator("json", SetRequestSchema, zodErrorHook);
+
 export function setRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
-  app.post("/set", async (c) => {
-    const rawBody = await c.req.json();
-    const { normalized, warnings } = normalizeParams(rawBody, ["userId", "key"]);
-    setDeprecationHeader(c, warnings);
-
-    const parsed = SetRequestSchema.safeParse(normalized);
-    if (!parsed.success) {
-      return c.json(
-        {
-          error: {
-            code: "invalid_request",
-            message: "Invalid request body",
-            details: parsed.error.issues,
-          },
-        },
-        400
-      );
-    }
-
+  app.post("/set", validator, async (c) => {
     const db = c.get("db");
     const account = c.get("account");
-    const { forScope, forKey, value } = parsed.data;
+    const { forScope, forKey, value } = c.req.valid("json");
 
     // Quota check: reject before any DB write or embedding API call
     try {

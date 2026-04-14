@@ -66,11 +66,9 @@ export const wmAccounts = pgTable(
     // Arbitrary metadata JSON. Used by sub-accounts to store purpose, tags,
     // or any context the parent wants to attach. Max 4KB enforced at the route.
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
-    // Self-referencing FK: containers (formerly sub-accounts) live inside a
-    // parent account. This column tracks the relationship; SDK and API use
-    // "container" as the noun as of April 14, 2026. NULL = top-level
-    // (parent-eligible) account. ON DELETE CASCADE removes all containers
-    // when the parent is deleted.
+    // Self-referencing FK: containers live inside a parent account.
+    // NULL = top-level (parent-eligible) account. ON DELETE CASCADE
+    // removes all containers when the parent is deleted.
     parentAccountId: uuid("parent_account_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

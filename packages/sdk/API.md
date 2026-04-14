@@ -2,39 +2,6 @@
 
 This file is the canonical in-repo reference for the SDK's public surface. It documents the types, error codes, and response shapes that the SDK and server must agree on. When the SDK types and this file disagree, this file wins.
 
-## Migration guide (April 14, 2026)
-
-Three breaking renames were applied in a single release. The server accepts both old and new parameter names for one release cycle, emitting an `X-Deprecation-Warning` header when old names are used. The SDK only emits new names.
-
-| Old name | New name | Where |
-|----------|----------|-------|
-| `userId` | `forScope` | All methods — `set`, `get`, `recall`, `remove`, `commit`, `list` |
-| `key` (memory key) | `forKey` | `set`, `get`, `remove` — NOT API key fields |
-| `input` (in recall) | `query` | `recall()` — commit still uses `input`/`output` |
-| `memoryBlock` | `context` | `RecallResponse` |
-| `subAccounts.*` | `containers.*` | SDK namespace and all container methods |
-| `/v1/sub-accounts/*` | `/v1/containers/*` | Server routes (old paths 308 redirect) |
-| `fetchMemories()` | `list()` | SDK method |
-| `sub_account_limit_exceeded` | `container_limit_exceeded` | Error code |
-
-SDK method signatures changed from positional args to options objects:
-
-```ts
-// Before
-memory.set(userId, key, value)
-memory.get(userId, key)
-memory.remove(userId, key)
-memory.recall({ userId, input })
-memory.commit({ userId, input, output })
-
-// After
-memory.set({ forScope, forKey, value })
-memory.get({ forScope, forKey })
-memory.remove({ forScope, forKey })
-memory.recall({ forScope, query })
-memory.commit({ forScope, input, output })
-```
-
 ## Quick start
 
 ```ts
@@ -65,9 +32,7 @@ const client = createClient({ apiKey: "wm_..." });
 
 ## Changelog
 
-- **2026-04-14:** Renamed `memoryBlock` → `context`, `userId` → `forScope`, `key` → `forKey`, `input` → `query` (recall only), sub-accounts → containers. Added `status` and `statusError` fields to Memory. Renamed `fetchMemories()` → `list()`. **BREAKING CHANGE** (backward compat via deprecation headers and redirects).
-- **2026-04-13:** Added Containers API (formerly Sub-Accounts) — container provisioning, key minting, soft revocation, key expiry, and quota inheritance. SDK namespace `containers` with 6 methods.
-- **2026-04-12:** Replaced `POST /v1/memories` with `POST /v1/memories/list` — added filtering, search, sort, cursor pagination, opt-in totals.
+Initial public API.
 
 ## Route conventions
 

@@ -104,14 +104,7 @@ export interface ListResponse {
   total?: number;
 }
 
-// ─── Backward compat aliases ─────────────────────────────────────────────
-
-/** @deprecated Use ListOptions instead */
-export type FetchMemoriesOptions = ListOptions;
-/** @deprecated Use ListResponse instead */
-export type FetchMemoriesResponse = ListResponse;
-
-// ─── Containers (formerly Sub-Accounts) ──────────────────────────────────
+// ─── Containers ──────────────────────────────────────────────────────────
 
 export interface Container {
   id: string;
@@ -188,25 +181,3 @@ export interface DeleteContainerResponse {
   deleted: boolean;
 }
 
-// ─── Backward compat aliases (sub-accounts → containers) ─────────────────
-
-/** @deprecated Use Container instead */
-export type SubAccount = Container;
-/** @deprecated Use ContainerKey instead */
-export type SubAccountKey = ContainerKey;
-/** @deprecated Use CreateContainerOptions instead */
-export type CreateSubAccountOptions = CreateContainerOptions;
-/** @deprecated Use CreateContainerKeyOptions instead */
-export type CreateSubAccountKeyOptions = CreateContainerKeyOptions;
-/** @deprecated Use CreateContainerResponse instead */
-export type CreateSubAccountResponse = CreateContainerResponse;
-/** @deprecated Use CreateContainerKeyResponse instead */
-export type CreateSubAccountKeyResponse = CreateContainerKeyResponse;
-/** @deprecated Use ListContainersResponse instead */
-export type ListSubAccountsResponse = ListContainersResponse;
-/** @deprecated Use GetContainerResponse instead */
-export type GetSubAccountResponse = GetContainerResponse;
-/** @deprecated Use RevokeContainerKeyResponse instead */
-export type RevokeSubAccountKeyResponse = RevokeContainerKeyResponse;
-/** @deprecated Use DeleteContainerResponse instead */
-export type DeleteSubAccountResponse = DeleteContainerResponse;

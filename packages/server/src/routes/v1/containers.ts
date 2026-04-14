@@ -25,7 +25,7 @@ function requireAdminScope(c: {
   const account = c.get("account");
   const apiKey = c.get("apiKey");
 
-  // Containers (formerly sub-accounts) cannot call container management endpoints
+  // Containers cannot call container management endpoints
   if (account.parentAccountId !== null) {
     return {
       error: {
@@ -402,24 +402,4 @@ export function containersRoute() {
   return app;
 }
 
-// ─── Legacy redirects for /sub-accounts/* → /containers/* ─────────────────
 
-export function subAccountsRedirectRoute() {
-  const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
-
-  app.all("/sub-accounts/*", (c) => {
-    const newPath = c.req.path.replace("/sub-accounts", "/containers");
-    const url = new URL(c.req.url);
-    url.pathname = url.pathname.replace("/sub-accounts", "/containers");
-    return c.redirect(url.toString(), 308);
-  });
-
-  // Handle /sub-accounts with no trailing path
-  app.all("/sub-accounts", (c) => {
-    const url = new URL(c.req.url);
-    url.pathname = url.pathname.replace("/sub-accounts", "/containers");
-    return c.redirect(url.toString(), 308);
-  });
-
-  return app;
-}

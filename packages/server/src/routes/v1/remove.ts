@@ -1,12 +1,9 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { zValidator } from "@hono/zod-validator";
 import { eq, and } from "drizzle-orm";
 import * as schema from "../../db/schema";
-import {
-  SCOPE_MAX_LENGTH,
-  normalizeParams,
-  setDeprecationHeader,
-} from "../../lib/validation";
+import { SCOPE_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
 import { findEndUser } from "../../lib/end-users";
 import type { WorkerEnv, AppVariables } from "../../types";
 
@@ -17,31 +14,15 @@ const RemoveRequestSchema = z.object({
   forKey: z.string().min(1).max(128),
 });
 
+const validator = zValidator("json", RemoveRequestSchema, zodErrorHook);
+
 export function removeRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
-  app.post("/remove", async (c) => {
-    const rawBody = await c.req.json();
-    const { normalized, warnings } = normalizeParams(rawBody, ["userId", "key"]);
-    setDeprecationHeader(c, warnings);
-
-    const parsed = RemoveRequestSchema.safeParse(normalized);
-    if (!parsed.success) {
-      return c.json(
-        {
-          error: {
-            code: "invalid_request",
-            message: "Invalid request body",
-            details: parsed.error.issues,
-          },
-        },
-        400
-      );
-    }
-
+  app.post("/remove", validator, async (c) => {
     const db = c.get("db");
     const account = c.get("account");
-    const { forScope, forKey } = parsed.data;
+    const { forScope, forKey } = c.req.valid("json");
 
     const endUser = await findEndUser(db, account.id, forScope);
 

@@ -1,13 +1,9 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { zValidator } from "@hono/zod-validator";
 import { eq, and, isNull, or, ilike, gt, lt, sql, type SQL } from "drizzle-orm";
 import * as schema from "../../db/schema";
-import {
-  SCOPE_MAX_LENGTH,
-  zodErrorHook,
-  normalizeParams,
-  setDeprecationHeader,
-} from "../../lib/validation";
+import { SCOPE_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
 import { findEndUser } from "../../lib/end-users";
 import type { WorkerEnv, AppVariables } from "../../types";
 
@@ -34,7 +30,7 @@ const listMemoriesSchema = z.object({
   includeTotal: z.boolean().optional().default(false),
 });
 
-// listValidator removed — manual parsing with normalization below
+const listValidator = zValidator("json", listMemoriesSchema, zodErrorHook);
 
 // ─── Order column mapping ────────────────────────────────────────────────────
 
@@ -90,25 +86,7 @@ export function memoriesRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
   // POST /v1/memories/list — list memories with filtering, search, cursor pagination
-  app.post("/memories/list", async (c) => {
-    const rawBody = await c.req.json();
-    const { normalized, warnings } = normalizeParams(rawBody, ["userId"]);
-    setDeprecationHeader(c, warnings);
-
-    const parsed = listMemoriesSchema.safeParse(normalized);
-    if (!parsed.success) {
-      return c.json(
-        {
-          error: {
-            code: "invalid_request",
-            message: "Invalid request body",
-            details: parsed.error.issues,
-          },
-        },
-        400
-      );
-    }
-
+  app.post("/memories/list", listValidator, async (c) => {
     const db = c.get("db");
     const account = c.get("account");
     const {
@@ -122,7 +100,7 @@ export function memoriesRoute() {
       limit,
       cursor,
       includeTotal,
-    } = parsed.data;
+    } = c.req.valid("json");
 
     // ── Resolve optional forScope to end_user_id ─────────────────────────
     let endUserId: string | undefined;

@@ -1,14 +1,11 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { zValidator } from "@hono/zod-validator";
 import { eq, and, isNull } from "drizzle-orm";
 import * as schema from "../../db/schema";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { ensureEndUser } from "../../lib/end-users";
-import {
-  SCOPE_MAX_LENGTH,
-  normalizeParams,
-  setDeprecationHeader,
-} from "../../lib/validation";
+import { SCOPE_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
 import { runExtraction, parseMaxInputBytes } from "../../lib/extraction";
 import { classifyFact, type ExistingMemory } from "../../lib/dedup";
 import EXTRACTION_PROMPT from "../../lib/extraction-prompt.txt";
@@ -22,32 +19,15 @@ const CommitRequestSchema = z.object({
   output: z.string().min(1),
 });
 
+const validator = zValidator("json", CommitRequestSchema, zodErrorHook);
+
 export function commitRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
-  app.post("/commit", async (c) => {
-    const rawBody = await c.req.json();
-    // Only normalize userId → forScope for commit; input/output stay as-is
-    const { normalized, warnings } = normalizeParams(rawBody, ["userId"]);
-    setDeprecationHeader(c, warnings);
-
-    const parsed = CommitRequestSchema.safeParse(normalized);
-    if (!parsed.success) {
-      return c.json(
-        {
-          error: {
-            code: "invalid_request",
-            message: "Invalid request body",
-            details: parsed.error.issues,
-          },
-        },
-        400
-      );
-    }
-
+  app.post("/commit", validator, async (c) => {
     const db = c.get("db");
     const account = c.get("account");
-    const { forScope, input, output } = parsed.data;
+    const { forScope, input, output } = c.req.valid("json");
 
     // Enforce size cap
     const maxBytes = parseMaxInputBytes(c.env.EXTRACTION_MAX_INPUT_BYTES);

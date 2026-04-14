@@ -117,12 +117,6 @@ export class WithMemoryClient {
     return this.request<ListResponse>("POST", "/v1/memories/list", body);
   }
 
-  /** @deprecated Use list() instead */
-  async fetchMemories(options?: ListOptions): Promise<ListResponse> {
-    console.warn("[@withmemory/sdk] fetchMemories() is deprecated. Use list() instead.");
-    return this.list(options);
-  }
-
   async deleteMemory(memoryId: string): Promise<RemoveResponse> {
     return this.request<RemoveResponse>("DELETE", `/v1/memories/${memoryId}`);
   }
@@ -153,7 +147,7 @@ export class WithMemoryClient {
     );
   }
 
-  // ─── Containers namespace (formerly subAccounts) ────────────────────────
+  // ─── Containers namespace ────────────────────────────────────────────────
   readonly containers = {
     create: (options: CreateContainerOptions): Promise<CreateContainerResponse> => {
       return this.request<CreateContainerResponse>("POST", "/v1/containers", options);
@@ -192,35 +186,6 @@ export class WithMemoryClient {
         `/v1/containers/${options.forContainer}`,
         { confirm: options.confirm }
       );
-    },
-  };
-
-  // ─── Deprecated subAccounts namespace ───────────────────────────────────
-  /** @deprecated Use containers instead */
-  readonly subAccounts = {
-    create: (options: CreateContainerOptions): Promise<CreateContainerResponse> => {
-      console.warn("[@withmemory/sdk] subAccounts is deprecated. Use containers instead.");
-      return this.containers.create(options);
-    },
-    createKey: (accountId: string, options: { issuedTo: string; scopes?: string; expiresIn?: number }): Promise<CreateContainerKeyResponse> => {
-      console.warn("[@withmemory/sdk] subAccounts is deprecated. Use containers instead.");
-      return this.containers.createKey({ forContainer: accountId, ...options });
-    },
-    list: (): Promise<ListContainersResponse> => {
-      console.warn("[@withmemory/sdk] subAccounts is deprecated. Use containers instead.");
-      return this.containers.list();
-    },
-    get: (accountId: string): Promise<GetContainerResponse> => {
-      console.warn("[@withmemory/sdk] subAccounts is deprecated. Use containers instead.");
-      return this.containers.get({ forContainer: accountId });
-    },
-    revokeKey: (accountId: string, keyId: string): Promise<RevokeContainerKeyResponse> => {
-      console.warn("[@withmemory/sdk] subAccounts is deprecated. Use containers instead.");
-      return this.containers.revokeKey({ forContainer: accountId, forKey: keyId });
-    },
-    delete: (accountId: string, options: { confirm: true }): Promise<DeleteContainerResponse> => {
-      console.warn("[@withmemory/sdk] subAccounts is deprecated. Use containers instead.");
-      return this.containers.delete({ forContainer: accountId, ...options });
     },
   };
 

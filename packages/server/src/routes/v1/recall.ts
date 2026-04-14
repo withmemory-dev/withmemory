@@ -1,13 +1,10 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { zValidator } from "@hono/zod-validator";
 import { eq, and, sql } from "drizzle-orm";
 import { isNull } from "drizzle-orm/sql/expressions/conditions";
 import * as schema from "../../db/schema";
-import {
-  SCOPE_MAX_LENGTH,
-  normalizeParams,
-  setDeprecationHeader,
-} from "../../lib/validation";
+import { SCOPE_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { embedQuery, EMBEDDING_DIMENSIONS } from "../../lib/embeddings";
 import {
@@ -29,6 +26,8 @@ const RecallRequestSchema = z.object({
   maxTokens: z.number().int().min(10).max(2000).optional(),
   defaults: z.record(z.string(), z.string()).optional(),
 });
+
+const validator = zValidator("json", RecallRequestSchema, zodErrorHook);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fallback ranking weights for the embedding-unavailable path.
@@ -151,28 +150,11 @@ function extractKeyMap(
 export function recallRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
-  app.post("/recall", async (c) => {
-    const rawBody = await c.req.json();
-    const { normalized, warnings } = normalizeParams(rawBody, ["userId", "input"]);
-    setDeprecationHeader(c, warnings);
-
-    const parsed = RecallRequestSchema.safeParse(normalized);
-    if (!parsed.success) {
-      return c.json(
-        {
-          error: {
-            code: "invalid_request",
-            message: "Invalid request body",
-            details: parsed.error.issues,
-          },
-        },
-        400
-      );
-    }
-
+  app.post("/recall", validator, async (c) => {
     const db = c.get("db");
     const account = c.get("account");
-    const { forScope, query, maxItems, maxTokens, defaults } = parsed.data;
+    const { forScope, query, maxItems, maxTokens, defaults } =
+      c.req.valid("json");
 
     const resolvedMaxItems = maxItems ?? 4;
     const resolvedMaxTokens = maxTokens ?? 150;

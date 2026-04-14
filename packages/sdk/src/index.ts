@@ -31,19 +31,6 @@ export type {
   RevokeContainerKeyResponse,
   DeleteContainerOptions,
   DeleteContainerResponse,
-  // Backward compat aliases
-  FetchMemoriesOptions,
-  FetchMemoriesResponse,
-  SubAccount,
-  SubAccountKey,
-  CreateSubAccountOptions,
-  CreateSubAccountResponse,
-  CreateSubAccountKeyOptions,
-  CreateSubAccountKeyResponse,
-  ListSubAccountsResponse,
-  GetSubAccountResponse,
-  RevokeSubAccountKeyResponse,
-  DeleteSubAccountResponse,
 } from "./types";
 
 import { WithMemoryClient } from "./client";
@@ -58,7 +45,7 @@ import type {
   ListOptions,
 } from "./types";
 
-// ─── Default singleton (UserDefaults pattern) ────────────────────────────────
+// ─── Default singleton ──────────────────────────────────────────────────────
 // Usage:
 //   import { memory } from '@withmemory/sdk';
 //   memory.configure({ apiKey: 'wm_...' });
@@ -108,11 +95,6 @@ export const memory = {
     return getInstance().list(options);
   },
 
-  /** @deprecated Use list() instead */
-  fetchMemories(options?: ListOptions) {
-    return getInstance().fetchMemories(options);
-  },
-
   deleteMemory(memoryId: string) {
     return getInstance().deleteMemory(memoryId);
   },
@@ -135,10 +117,5 @@ export const memory = {
 
   get containers() {
     return getInstance().containers;
-  },
-
-  /** @deprecated Use containers instead */
-  get subAccounts() {
-    return getInstance().subAccounts;
   },
 };
