@@ -21,8 +21,8 @@ export type { PlanTier };
  *
  * Race condition note: two concurrent writes can both pass this check and
  * both succeed, transiently exceeding the limit by a small amount. This is
- * acceptable for Session 10. A DB-level constraint or advisory lock is the
- * proper fix; deferred to a followup.
+ * acceptable for now. A DB-level constraint or advisory lock is the
+ * proper fix; tracked in docs/followups.md.
  */
 export async function checkMemoryQuota(
   db: Database,

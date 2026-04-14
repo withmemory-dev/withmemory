@@ -7,9 +7,7 @@
 
 WithMemory is the default memory layer for AI agents. Developers integrate it with two API calls — `memory.set()` to store facts explicitly, and `memory.recall()` to retrieve a prompt-ready context block before every LLM invocation. A third call, `memory.commit()`, runs async LLM extraction to pull durable facts out of conversation turns.
 
-The product positioning: zero configuration, TypeScript-first, works in five minutes, self-hostable on any Postgres.
-
-This repository contains the server (API + extraction pipeline), the client SDK, the dashboard, and the documentation site. It is a pnpm workspace monorepo.
+This repository contains the server (API + extraction pipeline) and the client SDK. It is a pnpm workspace monorepo.
 
 ## Architecture
 
@@ -154,9 +152,6 @@ See `packages/server/src/db/schema.ts` for the full definitions.
 
 - **Production API:** `https://api.withmemory.dev` → `withmemory-api` Worker
 - **Production database:** Supabase project `withmemory-prod`, region us-west-1
-- **Dashboard (planned):** `https://app.withmemory.dev`
-- **Marketing site (planned):** `https://withmemory.dev`
-- **Documentation (planned):** `https://withmemory.dev/docs` or subdomain
 
 ## What exists
 
@@ -168,10 +163,10 @@ See `packages/server/src/db/schema.ts` for the full definitions.
 - **Auth:** API key middleware with SHA-256 hash lookup and `last_used_at` fire-and-forget updates via `ctx.waitUntil`.
 - **E2E tests:** 41 tests passing against both local and production (40 without `WITHMEMORY_API_KEY_B`, 41 with), covering all routes plus auth, validation, idempotency, defaults, SDK register flow, extraction prompt CRUD, cross-account ownership, and plan enforcement (quota + feature gates).
 - **Eval harness:** `packages/eval/` with 50 extraction fixtures (extraction eval) and 30 recall fixtures (recall eval with ranking quality metrics).
-- **Plan enforcement:** `POST /v1/set` and `POST /v1/commit` check memory quota before write (403 `quota_exceeded`). `POST /v1/account/extraction-prompt` gated to pro/team/enterprise tiers (403 `plan_required`). `monthly_api_call_limit` column exists but enforcement deferred to Session 12.
+- **Plan enforcement:** `POST /v1/set` and `POST /v1/commit` check memory quota before write (403 `quota_exceeded`). `POST /v1/account/extraction-prompt` gated to pro/team/enterprise tiers (403 `plan_required`).
 - **Example:** `examples/vercel-ai-sdk/` demonstrates the SDK integration pattern with the Vercel AI SDK.
 
-## Test baselines (Session 10, Phase 2)
+## Test baselines
 
 | Suite | Baseline | Command |
 |---|---|---|
@@ -184,16 +179,13 @@ See `packages/server/src/db/schema.ts` for the full definitions.
 **E2E env vars required:**
 - `WITHMEMORY_API_KEY` — test account API key (required)
 - `WITHMEMORY_API_KEY_B` — second test account key for cross-account test (optional, +1 test)
-- `DATABASE_URL` — direct Postgres connection for plan enforcement test helpers (required since Session 10)
+- `DATABASE_URL` — direct Postgres connection for plan enforcement test helpers
 
 **Extraction and recall evals** require `OPENAI_API_KEY` via `source packages/server/.env.local`.
 
-## What is NOT yet built
+## Scope
 
-- The dashboard at `app.withmemory.dev`
-- Billing integration
-- Documentation site
-- Open-source publication (repo goes public when server + SDK are ready)
+This repo contains the SDK (`packages/sdk`) and server (`packages/server`). The dashboard, billing, and documentation site live in separate repositories.
 
 ## Further reading
 

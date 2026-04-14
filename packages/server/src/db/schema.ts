@@ -58,7 +58,7 @@ export const wmAccounts = pgTable(
     stripeSubscriptionId: text("stripe_subscription_id"),
     currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
     memoryLimit: integer("memory_limit").notNull().default(1000),
-    // Column exists for Session 12 Stripe integration. Not enforced as of Session 10.
+    // Reserved for future API call rate limiting. Not currently enforced.
     monthlyApiCallLimit: integer("monthly_api_call_limit").notNull().default(10000),
     // Human-readable display name. Required for sub-accounts, optional for
     // top-level accounts (which use email as their primary identifier).

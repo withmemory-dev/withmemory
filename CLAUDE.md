@@ -1,28 +1,26 @@
 # CLAUDE.md — Context for AI Coding Assistants
 
-This file is the primary orientation document for AI assistants working on WithMemory. Read it before making any code changes. It captures the product vision, technical decisions, and working conventions that aren't obvious from the code alone.
+This file is the primary orientation document for AI assistants working on WithMemory. Read it before making any code changes. It captures the technical decisions and working conventions that aren't obvious from the code alone.
 
 ## The product in one paragraph
 
-WithMemory is the default memory layer for AI agents. Developers integrate it with two API calls: `memory.set({ forScope, forKey, value })` to store facts explicitly, and `memory.recall({ forScope, query })` to retrieve context before every LLM invocation. A third call, `memory.commit({ forScope, input, output })`, runs async LLM extraction to derive durable facts from conversation turns. The output of `recall()` is a rigid contract: a `context` string under 150 tokens containing at most 4 items, safe to prepend to any system prompt. Competitors are Mem0, Zep, Letta, Supermemory. Differentiators: zero configuration, TypeScript-first, conservative extraction (70% of commits should produce zero memories), self-hostable on any Postgres.
+WithMemory is a persistent memory layer for AI agents. Developers integrate it with two API calls: `memory.set({ forScope, forKey, value })` to store facts explicitly, and `memory.recall({ forScope, query })` to retrieve context before every LLM invocation. A third call, `memory.commit({ forScope, input, output })`, runs async LLM extraction to derive durable facts from conversation turns. The output of `recall()` is a rigid contract: a `context` string under 150 tokens containing at most 4 items, safe to prepend to any system prompt. WithMemory is configuration-free by default, TypeScript-native, and self-hostable on any Postgres database.
 
-## Positioning and strategy
-
-This is critical context for product decisions:
-
-WithMemory is targeted at TypeScript developers building AI agents on Cloudflare Workers or Vercel with OpenAI or Anthropic API keys. The primary competitor is Mem0, which has $24M in funding but is Python-first and has well-documented extraction quality problems (one audit found 97.8% junk rate in production deployments). WithMemory's competitive wedge is aggressive quality through conservative extraction, combined with a TypeScript-native developer experience.
-
-The product is being built as open source from the ground up but will launch from a private repo. The SDK (`packages/sdk`) will be Apache 2.0. The server (`packages/server`) will be BUSL 1.1 (converting to Apache 2.0 after four years). The rationale: Apache 2.0 on the SDK drives adoption, BUSL on the server prevents cloud providers from reselling without contributing back.
+## Design principles
 
 Every technical decision should preserve two properties: (1) zero configuration for the developer, (2) portability across Postgres providers. If a change would require a developer to set thresholds, pick embedding models, or configure retrieval, it is probably wrong. If a change would couple the server to Supabase-specific features, it is wrong.
 
+## Licensing
+
+The SDK (`packages/sdk`) is Apache 2.0. The server (`packages/server`) is BUSL 1.1, converting to Apache 2.0 after four years.
+
 ## Architecture at a glance
 
-**Runtime:** Cloudflare Workers via Hono. Hono is chosen because it runs identically on Workers, Node, Bun, and Deno — which means the same server code will eventually run as a Docker container for self-hosters.
+**Runtime:** Cloudflare Workers via Hono. Hono runs identically on Workers, Node, Bun, and Deno, so the same server code can run as a Docker container for self-hosters.
 
 **Database:** PostgreSQL with pgvector. Hosted version uses Supabase. Self-hosted can use any Postgres provider.
 
-**Query layer:** Drizzle ORM with the `postgres` driver (postgres-js). Drizzle is chosen for type safety and portability. The `postgres` driver is chosen for serverless compatibility and Supabase pooler support.
+**Query layer:** Drizzle ORM with the `postgres` driver (postgres-js). Drizzle provides type safety and portability. The `postgres` driver provides serverless compatibility and Supabase pooler support.
 
 **Schema location:** `packages/server/src/db/schema.ts` is the source of truth for the database schema. All tables, columns, constraints, and indexes are defined here in TypeScript. Migrations are generated from this file via `pnpm db:generate`.
 
@@ -46,7 +44,7 @@ These are rules that should not be changed without an explicit architectural dis
 
 **The recall output contract is rigid.** `context` is always a string, always under 150 tokens, always contains at most 4 items. Do not add optional fields, do not make the length configurable, do not return null. Breaking this contract is worse than keeping it imperfect.
 
-**Extraction is conservative.** The extraction prompt should produce empty results from ~70% of commits. A polluted memory store actively degrades agent quality. When in doubt, extract nothing.
+**Extraction is conservative.** The extraction prompt is designed to produce empty results from the majority of conversation turns. A polluted memory store actively degrades agent quality. When in doubt, extract nothing.
 
 **TypeScript strict mode everywhere.** No `any`, no `@ts-ignore` without a comment explaining why, no implicit any.
 
@@ -164,7 +162,7 @@ pnpm db:studio                                  # Launch Drizzle Studio (local w
 
 **Drizzle's custom vector type uses 512 dimensions, not 1536** — we use Matryoshka truncation of OpenAI's `text-embedding-3-small` to cut storage in half while retaining ~97% of quality. Do not change this without considering the storage implications.
 
-## Current state (April 2026, end of Session 13)
+## Current state (April 2026)
 
 The server API, TypeScript SDK, and extraction pipeline are functional. All `/v1/*` routes are live.
 
@@ -189,15 +187,7 @@ What exists:
 - Secret management via `.env.local` and `.dev.vars`
 - Git repository at `github.com/withmemory-dev/withmemory` (private)
 
-What does not yet exist:
-- ~~Semantic ranking in recall~~ (done — Session 6)
-- ~~Deduplication and conflict resolution~~ (done — Session 5)
-- ~~register() → server defaults forwarding~~ (done — Session 6, Phase 2b; `recall()` merges registered + per-call defaults and forwards to server)
-- Real tokenizer for the trim loop
-- The dashboard (`apps/dashboard` is empty)
-- Documentation site
-- Billing integration
-- CI/CD
+This repo contains the SDK and server. The dashboard, billing, and documentation site live in separate repositories.
 
 ## How to contribute effectively
 
@@ -228,7 +218,7 @@ When touching the database schema:
 
 This repo is built as if fully open — every file should be appropriate for a public repository.
 
-**Never commit strategic context.** Competitive positioning, pricing analysis, kill criteria, and investor framing live outside the repo. Do not reference out-of-repo strategic documents by path, quote their framing in code comments, commit messages, docs, tests, or fixtures, or mention competitors by name except where CLAUDE.md or API.md already do so.
+**Keep the repo technical.** Do not commit business framing, competitor references, or internal planning documents. The repo documents what the SDK and server do and how to use them.
 
 **Never commit secrets.** No API keys, passwords, or tokens in code, comments, commit messages, or test fixtures. Real values go in `.env.local`, `.dev.vars`, or `wrangler secret put`.
 
