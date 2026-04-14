@@ -4,7 +4,7 @@ This file is the primary orientation document for AI assistants working on WithM
 
 ## The product in one paragraph
 
-WithMemory is the default memory layer for AI agents. Developers integrate it with two API calls: `memory.set(userId, key, value)` to store facts explicitly, and `memory.recall({ userId, input })` to retrieve a memory block before every LLM invocation. A third call, `memory.commit({ userId, input, output })`, runs async LLM extraction to derive durable facts from conversation turns. The output of `recall()` is a rigid contract: a `context` string under 150 tokens containing at most 4 items, safe to prepend to any system prompt. Competitors are Mem0, Zep, Letta, Supermemory. Differentiators: zero configuration, TypeScript-first, conservative extraction (70% of commits should produce zero memories), self-hostable on any Postgres.
+WithMemory is the default memory layer for AI agents. Developers integrate it with two API calls: `memory.set({ forScope, forKey, value })` to store facts explicitly, and `memory.recall({ forScope, query })` to retrieve context before every LLM invocation. A third call, `memory.commit({ forScope, input, output })`, runs async LLM extraction to derive durable facts from conversation turns. The output of `recall()` is a rigid contract: a `context` string under 150 tokens containing at most 4 items, safe to prepend to any system prompt. Competitors are Mem0, Zep, Letta, Supermemory. Differentiators: zero configuration, TypeScript-first, conservative extraction (70% of commits should produce zero memories), self-hostable on any Postgres.
 
 ## Positioning and strategy
 
@@ -164,9 +164,9 @@ pnpm db:studio                                  # Launch Drizzle Studio (local w
 
 **Drizzle's custom vector type uses 512 dimensions, not 1536** — we use Matryoshka truncation of OpenAI's `text-embedding-3-small` to cut storage in half while retaining ~97% of quality. Do not change this without considering the storage implications.
 
-## Current state (April 2026, end of Session 3)
+## Current state (April 2026, end of Session 13)
 
-The server API, TypeScript SDK, and extraction pipeline are functional. All eight `/v1/*` routes are live.
+The server API, TypeScript SDK, and extraction pipeline are functional. All `/v1/*` routes are live.
 
 What exists:
 - Monorepo structure with pnpm workspaces

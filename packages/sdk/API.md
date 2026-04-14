@@ -2,14 +2,76 @@
 
 This file is the canonical in-repo reference for the SDK's public surface. It documents the types, error codes, and response shapes that the SDK and server must agree on. When the SDK types and this file disagree, this file wins.
 
+## Migration guide (April 14, 2026)
+
+Three breaking renames were applied in a single release. The server accepts both old and new parameter names for one release cycle, emitting an `X-Deprecation-Warning` header when old names are used. The SDK only emits new names.
+
+| Old name | New name | Where |
+|----------|----------|-------|
+| `userId` | `forScope` | All methods — `set`, `get`, `recall`, `remove`, `commit`, `list` |
+| `key` (memory key) | `forKey` | `set`, `get`, `remove` — NOT API key fields |
+| `input` (in recall) | `query` | `recall()` — commit still uses `input`/`output` |
+| `memoryBlock` | `context` | `RecallResponse` |
+| `subAccounts.*` | `containers.*` | SDK namespace and all container methods |
+| `/v1/sub-accounts/*` | `/v1/containers/*` | Server routes (old paths 308 redirect) |
+| `fetchMemories()` | `list()` | SDK method |
+| `sub_account_limit_exceeded` | `container_limit_exceeded` | Error code |
+
+SDK method signatures changed from positional args to options objects:
+
+```ts
+// Before
+memory.set(userId, key, value)
+memory.get(userId, key)
+memory.remove(userId, key)
+memory.recall({ userId, input })
+memory.commit({ userId, input, output })
+
+// After
+memory.set({ forScope, forKey, value })
+memory.get({ forScope, forKey })
+memory.remove({ forScope, forKey })
+memory.recall({ forScope, query })
+memory.commit({ forScope, input, output })
+```
+
+## Quick start
+
+```ts
+import { memory } from "@withmemory/sdk";
+
+memory.configure({ apiKey: "wm_..." });
+
+await memory.set({
+  value: "Andrew",
+  forKey: "name",
+  forScope: "user_alice"
+});
+
+const { context } = await memory.recall({
+  forScope: "user_alice",
+  query: "What's the user's name?"
+});
+
+// context → "name: Andrew"
+```
+
+For multi-tenant apps, use `createClient()`:
+
+```ts
+import { createClient } from "@withmemory/sdk";
+const client = createClient({ apiKey: "wm_..." });
+```
+
 ## Changelog
 
-- **2026-04-13:** Added Sub-Accounts API — sub-account provisioning, key minting, soft revocation, key expiry, and quota inheritance. SDK namespace `subAccounts` with 6 methods. New error codes: `sub_account_limit_exceeded`, `key_expired`, `confirmation_required`. Auth middleware now supports soft revocation (`revoked_at`) and key expiry (`expires_at`). **Additive, non-breaking.**
-- **2026-04-12:** Replaced `POST /v1/memories` with `POST /v1/memories/list` — added filtering, search, sort, cursor pagination, opt-in totals. SDK method `getUserMemories()` replaced by `fetchMemories()`. **BREAKING CHANGE.**
+- **2026-04-14:** Renamed `memoryBlock` → `context`, `userId` → `forScope`, `key` → `forKey`, `input` → `query` (recall only), sub-accounts → containers. Added `status` and `statusError` fields to Memory. Renamed `fetchMemories()` → `list()`. **BREAKING CHANGE** (backward compat via deprecation headers and redirects).
+- **2026-04-13:** Added Containers API (formerly Sub-Accounts) — container provisioning, key minting, soft revocation, key expiry, and quota inheritance. SDK namespace `containers` with 6 methods.
+- **2026-04-12:** Replaced `POST /v1/memories` with `POST /v1/memories/list` — added filtering, search, sort, cursor pagination, opt-in totals.
 
 ## Route conventions
 
-All `/v1/*` routes are POST with JSON bodies, except DELETE on resources addressed by primary key (e.g., `DELETE /v1/memories/:id`) and GET for read-only status endpoints (e.g., `GET /v1/health`). The `userId` field is a filter within the account's data, not an addressable resource — it lives in the request body, never in the URL path or query string.
+All `/v1/*` routes are POST with JSON bodies, except DELETE on resources addressed by primary key (e.g., `DELETE /v1/memories/:id`) and GET for read-only status endpoints (e.g., `GET /v1/health`). The `forScope` field is a filter within the account's data, not an addressable resource — it lives in the request body, never in the URL path or query string.
 
 ## Error handling
 
@@ -27,34 +89,18 @@ class WithMemoryError extends Error {
 
 ### Error codes
 
-| Code              | Origin      | HTTP Status | When                                                        |
-|-------------------|-------------|-------------|-------------------------------------------------------------|
-| `unauthorized`                | Server      | 401         | Missing, malformed, or invalid API key                      |
-| `key_expired`                 | Server      | 401         | API key has passed its `expires_at` timestamp               |
-| `invalid_request`             | Server      | 400         | Request body fails Zod validation                           |
-| `not_found`                   | Server      | 404         | Route does not exist or resource not found                   |
-| `quota_exceeded`              | Server      | 403         | Account memory limit reached (summed across parent + sub-accounts)  |
-| `plan_required`               | Server      | 403         | Feature requires a higher plan tier                         |
-| `sub_account_limit_exceeded`  | Server      | 403         | Account has reached its sub-account cap              |
-| `confirmation_required`       | Server      | 400         | Destructive action requires `{ confirm: true }` in body     |
-| `timeout`                     | SDK         | 0           | Request exceeded the configured timeout                      |
-| `network_error`               | SDK         | 0           | Fetch failed (DNS, connection refused, TLS, offline, etc.)  |
-
-**Convention:** Error codes are `snake_case_lower`, matching OpenAI and Stripe conventions and the server's existing style.
-
-**Server-side codes** are returned in the standard error envelope: `{ error: { code, message, details? } }`. The SDK parses this envelope and maps it to a `WithMemoryError` instance.
-
-**SDK-side codes** (`timeout`, `network_error`) are generated client-side when the HTTP request itself fails before the server can respond. These always have `status: 0`.
-
-### Error codes — planned
-
-These codes do not exist yet. They are listed here so nobody adds them prematurely.
-
-| Code                  | Purpose                                              |
-|-----------------------|------------------------------------------------------|
-| `rate_limited`        | Account has exceeded its request quota                |
-| `extraction_failed`   | LLM extraction error surfaced to caller (currently internal-only on the exchange row) |
-| `internal_error`      | Unclassified server error (5xx)                      |
+| Code | Origin | HTTP Status | When |
+|------|--------|-------------|------|
+| `unauthorized` | Server | 401 | Missing, malformed, or invalid API key |
+| `key_expired` | Server | 401 | API key has passed its `expires_at` timestamp |
+| `invalid_request` | Server | 400 | Request body fails Zod validation |
+| `not_found` | Server | 404 | Route does not exist or resource not found |
+| `quota_exceeded` | Server | 403 | Account memory limit reached (summed across parent + containers) |
+| `plan_required` | Server | 403 | Feature requires a higher plan tier |
+| `container_limit_exceeded` | Server | 403 | Account has reached its container cap |
+| `confirmation_required` | Server | 400 | Destructive action requires `{ confirm: true }` in body |
+| `timeout` | SDK | 0 | Request exceeded the configured timeout |
+| `network_error` | SDK | 0 | Fetch failed (DNS, connection refused, TLS, offline, etc.) |
 
 ## Types
 
@@ -65,23 +111,23 @@ The canonical memory object returned by `set`, `get`, `recall`, and list operati
 ```ts
 interface Memory {
   id: string;
-  userId: string;
-  key: string | null;   // null for extracted memories (source: "extracted")
-  value: string;        // the memory content — named "value" in the SDK, "content" in the DB
+  forScope: string;
+  forKey: string | null;   // null for extracted memories (source: "extracted")
+  value: string;           // the memory content — named "value" in the SDK, "content" in the DB
   source: "explicit" | "extracted";
-  createdAt: string;    // ISO 8601
-  updatedAt: string;    // ISO 8601
+  status: "ready" | "pending" | "failed";
+  statusError: string | null;
+  createdAt: string;       // ISO 8601
+  updatedAt: string;       // ISO 8601
 }
 ```
-
-**Note:** The server stores the text in a column named `content`. The SDK maps this to `value` in all responses to match the `set(userId, key, value)` calling convention. This mapping happens in the server's route handlers, not in the SDK.
 
 ### RecallResponse
 
 ```ts
 interface RecallResponse {
-  context: string;            // Always a string, never null. Empty string if no memories.
-  memories: Memory[];        // The memories that contributed to the context.
+  context: string;         // Always a string, never null. Empty string if no memories.
+  memories: Memory[];      // The memories that contributed to the context (status: "ready" only).
   ranking: {
     strategy: "semantic" | "recency_importance" | "user_not_found";
     reason?: "embedding_unavailable";
@@ -91,154 +137,112 @@ interface RecallResponse {
 
 The `ranking` field describes how the returned memories were ordered:
 
-- **`"semantic"`** — memories were ranked by cosine similarity against an embedding of the query input, combined with recency decay, importance, and source tier. This is the normal path.
-- **`"recency_importance"`** — the query embedding could not be generated (typically because the embeddings API was unavailable), so memories were ranked by recency and importance only, with source tier still applied. The `reason` field is set to `"embedding_unavailable"` in this case. Clients can choose to retry, degrade, or proceed with the returned memories as-is.
-- **`"user_not_found"`** — the requested `userId` does not exist under the authenticated account, so there were no memories to rank. The `memories` array is empty. The `context` may still contain registered defaults if any were provided in the request. This is not an error; it's a normal response for first-contact with a new end user.
+- **`"semantic"`** — memories were ranked by cosine similarity against an embedding of the query, combined with recency decay, importance, and source tier.
+- **`"recency_importance"`** — the query embedding could not be generated, so memories were ranked by recency and importance only. The `reason` field is `"embedding_unavailable"`.
+- **`"user_not_found"`** — the requested `forScope` does not exist under the authenticated account. The `memories` array is empty. The `context` may still contain registered defaults.
 
-The `ranking` field is additive and backward-compatible. SDK clients that don't know about it will continue to work unchanged. The SDK's `RecallResponse` type now includes the `ranking` field.
-
-### SetResponse
+### SetResponse / GetResponse / RemoveResponse / HealthResponse
 
 ```ts
-interface SetResponse {
-  memory: Memory;
+interface SetResponse { memory: Memory; }
+interface GetResponse { memory: Memory | null; }
+interface RemoveResponse { deleted: boolean; }
+interface HealthResponse { status: "ok"; version: string; }
+```
+
+### ListOptions / ListResponse
+
+```ts
+interface ListOptions {
+  forScope?: string;         // Filter by scope. Omit for account-wide listing.
+  source?: "explicit" | "extracted" | "all";
+  search?: string;           // Case-insensitive substring match (1-500 chars)
+  createdAfter?: string;     // ISO 8601
+  createdBefore?: string;    // ISO 8601
+  orderBy?: "updatedAt" | "createdAt" | "importance" | "lastRecalledAt";
+  orderDir?: "desc" | "asc";
+  limit?: number;            // 1-200, default 50
+  cursor?: string;
+  includeTotal?: boolean;
+}
+
+interface ListResponse {
+  memories: Memory[];
+  nextCursor: string | null;
+  total?: number;
 }
 ```
 
-### GetResponse
-
-```ts
-interface GetResponse {
-  memory: Memory | null;     // null if the key does not exist for this user
-}
-```
-
-### RemoveResponse
-
-```ts
-interface RemoveResponse {
-  deleted: boolean;          // true if a memory was found and removed
-}
-```
-
-### HealthResponse
-
-```ts
-interface HealthResponse {
-  status: "ok";
-  version: string;
-}
-```
-
-`GET /v1/health` is authenticated — it sits behind the same Bearer token middleware as all other `/v1/*` routes. This means `health()` validates both service availability and API key validity. Unauthenticated health checks are available at `/health` and `/health/db` on the root app.
-
-### ExtractionPromptResponse
+### ExtractionPromptResponse / ResetExtractionPromptResponse
 
 ```ts
 interface ExtractionPromptResponse {
-  prompt: string | null;    // the custom prompt text, or null if using default
+  prompt: string | null;
   source: "custom" | "default";
 }
-```
 
-Returned by both `setExtractionPrompt()` and `getExtractionPrompt()`. When `source` is `"custom"`, `prompt` contains the account's custom extraction prompt. When `source` is `"default"`, `prompt` is `null` and the server uses the bundled extraction prompt.
-
-### ResetExtractionPromptResponse
-
-```ts
 interface ResetExtractionPromptResponse {
-  reset: boolean;           // always true
+  reset: boolean;
 }
 ```
-
-### FetchMemoriesOptions
-
-```ts
-interface FetchMemoriesOptions {
-  userId?: string;           // Filter by end user. Omit for account-wide listing.
-  source?: "explicit" | "extracted" | "all";  // Default: "all"
-  search?: string;           // Case-insensitive substring match on key and value (1–500 chars)
-  createdAfter?: string;     // ISO 8601 datetime filter (exclusive)
-  createdBefore?: string;    // ISO 8601 datetime filter (exclusive)
-  orderBy?: "updatedAt" | "createdAt" | "importance" | "lastRecalledAt";  // Default: "updatedAt"
-  orderDir?: "desc" | "asc"; // Default: "desc"
-  limit?: number;            // 1–200, default 50
-  cursor?: string;           // Opaque cursor from a previous response's nextCursor
-  includeTotal?: boolean;    // Default: false. When true, response includes total count.
-}
-```
-
-### FetchMemoriesResponse
-
-```ts
-interface FetchMemoriesResponse {
-  memories: Memory[];        // Page of memories matching the filters
-  nextCursor: string | null; // Opaque cursor for the next page, or null if no more pages
-  total?: number;            // Only present when includeTotal: true was in the request
-}
-```
-
-**Cursor pagination:** Cursors are opaque strings. Do not parse, construct, or cache them across API versions. Pass the `nextCursor` from one response as the `cursor` in the next request to fetch the next page. When `nextCursor` is `null`, there are no more pages. Cursors use keyset pagination internally, which is O(1) regardless of page depth.
 
 ## SDK methods
 
-| Method                              | HTTP                          | Returns              | Throws on error? |
-|-------------------------------------|-------------------------------|----------------------|-------------------|
-| `configure(config)`                 | —                             | `void`               | Yes               |
-| `register(defaults)`               | —                             | `void`               | Yes               |
-| `set(userId, key, value)`          | `POST /v1/set`                | `SetResponse`        | Yes               |
-| `get(userId, key)`                 | `POST /v1/get`                | `GetResponse`        | Yes               |
-| `recall({ userId, input, ... })`   | `POST /v1/recall`             | `RecallResponse`     | Yes               |
-| `remove(userId, key)`              | `POST /v1/remove`             | `RemoveResponse`     | Yes               |
-| `commit({ userId, input, output })`| `POST /v1/commit`             | `void`               | **Never**         |
-| `fetchMemories(options?)`          | `POST /v1/memories/list`      | `FetchMemoriesResponse` | Yes            |
-| `deleteMemory(memoryId)`           | `DELETE /v1/memories/:id`     | `RemoveResponse`     | Yes               |
-| `health()`                         | `GET /v1/health`              | `HealthResponse`     | Yes               |
-| `setExtractionPrompt(prompt)`     | `POST /v1/account/extraction-prompt` | `ExtractionPromptResponse` | Yes          |
-| `getExtractionPrompt()`           | `GET /v1/account/extraction-prompt`  | `ExtractionPromptResponse` | Yes          |
-| `resetExtractionPrompt()`         | `DELETE /v1/account/extraction-prompt` | `ResetExtractionPromptResponse` | Yes   |
+| Method | HTTP | Returns | Throws on error? |
+|--------|------|---------|-------------------|
+| `configure(config)` | — | `void` | Yes |
+| `register(defaults)` | — | `void` | Yes |
+| `set({ forScope, forKey, value })` | `POST /v1/set` | `SetResponse` | Yes |
+| `get({ forScope, forKey })` | `POST /v1/get` | `GetResponse` | Yes |
+| `recall({ forScope, query, ... })` | `POST /v1/recall` | `RecallResponse` | Yes |
+| `remove({ forScope, forKey })` | `POST /v1/remove` | `RemoveResponse` | Yes |
+| `commit({ forScope, input, output })` | `POST /v1/commit` | `void` | **Never** |
+| `list(options?)` | `POST /v1/memories/list` | `ListResponse` | Yes |
+| `deleteMemory(memoryId)` | `DELETE /v1/memories/:id` | `RemoveResponse` | Yes |
+| `health()` | `GET /v1/health` | `HealthResponse` | Yes |
+| `setExtractionPrompt(prompt)` | `POST /v1/account/extraction-prompt` | `ExtractionPromptResponse` | Yes |
+| `getExtractionPrompt()` | `GET /v1/account/extraction-prompt` | `ExtractionPromptResponse` | Yes |
+| `resetExtractionPrompt()` | `DELETE /v1/account/extraction-prompt` | `ResetExtractionPromptResponse` | Yes |
 
 **`register(defaults)`** stores defaults on the client instance. Defaults are forwarded in the `recall()` request body as a `defaults` field and appear in the `context` as tier 4 fallback (after explicit, extracted, and summary memories). Defaults do NOT appear in the `memories` array — they are prompt-block-only.
 
-**`commit()` is fire-and-forget.** It catches all errors internally and never throws. The server returns 202 immediately and runs extraction asynchronously. Supports an `Idempotency-Key` header (max 255 chars) — repeated calls with the same key return 202 without re-processing. This is the one exception to the error contract.
+**`commit()` is fire-and-forget.** It catches all errors internally and never throws. The server returns 202 immediately and runs extraction asynchronously. Supports an `Idempotency-Key` header (max 255 chars).
 
-**`recall()` accepts optional `defaults`** — a `Record<string, string>` of key-value pairs to include in the prompt block when real memories don't fill the budget. Per-call defaults merge with (and override) any defaults set via `register()`. The `memories` array in the response reflects real database rows only.
+**`recall()` accepts optional `defaults`** — a `Record<string, string>` of key-value pairs to include in the context when real memories don't fill the budget. Per-call defaults merge with (and override) any defaults set via `register()`. Only memories with `status: "ready"` are returned.
 
-**`fetchMemories(options?)`** lists non-superseded memories with optional filtering, search, sort, and cursor-based pagination. Supports account-wide listing (omit `userId`) or per-user listing (provide `userId`). Returns a `FetchMemoriesResponse` envelope with `memories`, `nextCursor`, and optionally `total`. See the FetchMemoriesOptions and FetchMemoriesResponse types below. **`deleteMemory()`** deletes a memory by ID with account-level ownership check.
+**`list(options?)`** lists non-superseded memories with optional filtering, search, sort, and cursor-based pagination. Supports account-wide listing (omit `forScope`) or per-scope listing (provide `forScope`). Cursors are opaque strings using keyset pagination internally.
 
-**`setExtractionPrompt(prompt)`** sets a custom extraction prompt for the authenticated account. The prompt must be 1–32,768 characters after trimming whitespace. The custom prompt is used instead of the bundled default when `commit()` runs extraction. **`getExtractionPrompt()`** reads the current prompt state. **`resetExtractionPrompt()`** clears the custom prompt, reverting to the bundled default.
+## Containers
 
-## Sub-Accounts
+Containers allow Pro-and-up accounts to provision isolated namespaces for autonomous agents. Each container has its own memories, keys, and end users, but quota is inherited from the parent account.
 
-Sub-accounts allow Pro-and-up accounts to provision sub-accounts for autonomous agents. Sub-accounts have their own memories, keys, and end users, but quota is inherited from the parent account.
+All container management endpoints require an API key with `account:admin` scope on a non-container account. Container keys cannot access container management endpoints.
 
-All sub-account management endpoints require an API key with `account:admin` scope on a non-sub-account. Sub-account keys cannot access sub-account management endpoints.
+### Container limits per plan tier
 
-### Sub-account limits per plan tier
+| Plan | Container limit |
+|------|-----------------|
+| Pro | 10 |
+| Team | 100 |
+| Enterprise | Unlimited |
 
-| Plan       | Sub-account limit |
-|------------|-------------------|
-| Pro        | 10                |
-| Team       | 100               |
-| Enterprise | Unlimited         |
+### Container SDK methods
 
-### Sub-Account SDK methods
+All methods are namespaced under `containers`:
 
-All methods are namespaced under `subAccounts`:
+| Method | HTTP | Returns | Throws on error? |
+|--------|------|---------|-------------------|
+| `containers.create({ name, metadata? })` | `POST /v1/containers` | `CreateContainerResponse` | Yes |
+| `containers.createKey({ forContainer, issuedTo, scopes?, expiresIn? })` | `POST /v1/containers/:id/keys` | `CreateContainerKeyResponse` | Yes |
+| `containers.list()` | `GET /v1/containers` | `ListContainersResponse` | Yes |
+| `containers.get({ forContainer })` | `GET /v1/containers/:id` | `GetContainerResponse` | Yes |
+| `containers.revokeKey({ forContainer, forKey })` | `DELETE /v1/containers/:id/keys/:keyId` | `RevokeContainerKeyResponse` | Yes |
+| `containers.delete({ forContainer, confirm: true })` | `DELETE /v1/containers/:id` | `DeleteContainerResponse` | Yes |
 
-| Method                                          | HTTP                                          | Returns                             | Throws on error? |
-|-------------------------------------------------|-----------------------------------------------|-------------------------------------|-------------------|
-| `subAccounts.create(options)`                | `POST /v1/sub-accounts`                    | `CreateSubAccountResponse`       | Yes               |
-| `subAccounts.createKey(accountId, options)`  | `POST /v1/sub-accounts/:id/keys`           | `CreateSubAccountKeyResponse`    | Yes               |
-| `subAccounts.list()`                         | `GET /v1/sub-accounts`                     | `ListSubAccountsResponse`        | Yes               |
-| `subAccounts.get(accountId)`                 | `GET /v1/sub-accounts/:id`                 | `GetSubAccountResponse`          | Yes               |
-| `subAccounts.revokeKey(accountId, keyId)`    | `DELETE /v1/sub-accounts/:id/keys/:keyId`  | `RevokeSubAccountKeyResponse`    | Yes               |
-| `subAccounts.delete(accountId, { confirm })` | `DELETE /v1/sub-accounts/:id`              | `DeleteSubAccountResponse`       | Yes               |
-
-### SubAccount
+### Container / ContainerKey types
 
 ```ts
-interface SubAccount {
+interface Container {
   id: string;
   parentAccountId: string;
   name?: string;
@@ -249,12 +253,8 @@ interface SubAccount {
   activeKeyCount?: number;
   createdAt: string;
 }
-```
 
-### SubAccountKey
-
-```ts
-interface SubAccountKey {
+interface ContainerKey {
   id: string;
   accountId: string;
   keyPrefix: string;
@@ -265,26 +265,13 @@ interface SubAccountKey {
 }
 ```
 
-### CreateSubAccountKeyResponse
-
-```ts
-interface CreateSubAccountKeyResponse {
-  key: SubAccountKey;
-  rawKey: string;  // Show-once raw credential. Not stored after response.
-}
-```
-
 ### Key scopes
 
-API keys have a `scopes` field (comma-separated text). Available scopes:
-
-| Scope            | Grants                                              |
-|------------------|-----------------------------------------------------|
-| `memory:read`    | `get`, `recall`, `fetchMemories`, `health`          |
-| `memory:write`   | `set`, `remove`, `commit`, `deleteMemory`           |
-| `account:admin`  | Sub-account management endpoints, extraction prompt CRUD |
-
-Existing keys default to `memory:read,memory:write,account:admin`. Sub-account keys minted via `subAccounts.createKey()` default to `memory:read,memory:write` (no `account:admin`). Specifying `account:admin` on a sub-account key returns 400.
+| Scope | Grants |
+|-------|--------|
+| `memory:read` | `get`, `recall`, `list`, `health` |
+| `memory:write` | `set`, `remove`, `commit`, `deleteMemory` |
+| `account:admin` | Container management endpoints, extraction prompt CRUD |
 
 ### Key expiry
 
@@ -292,8 +279,8 @@ Keys can have an `expiresAt` timestamp. Expired keys return 401 with error code 
 
 ### Soft revocation
 
-Keys are soft-revoked by setting `revoked_at` instead of deleting the row. Revoked keys return 401 `unauthorized`. The `revokeKey()` method sets `revoked_at = NOW()`.
+Keys are soft-revoked by setting `revoked_at` instead of deleting the row. Revoked keys return 401 `unauthorized`.
 
 ### Quota inheritance
 
-Sub-account memories count against the parent account's `memory_limit`. The quota check sums active (non-superseded) memories across the parent and all its sub-accounts. When the combined limit is reached, writes on both the parent and sub-accounts return 403 `quota_exceeded`.
+Container memories count against the parent account's `memory_limit`. The quota check sums active (non-superseded) memories across the parent and all its containers. When the combined limit is reached, writes on both the parent and containers return 403 `quota_exceeded`.
