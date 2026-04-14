@@ -1,9 +1,12 @@
 import { WithMemoryError } from "./errors";
 import type {
   WithMemoryConfig,
+  SetParams,
   SetResponse,
+  GetParams,
   GetResponse,
   RecallResponse,
+  RemoveParams,
   RemoveResponse,
   HealthResponse,
   RecallOptions,
@@ -11,16 +14,19 @@ import type {
   RegisterDefaults,
   ExtractionPromptResponse,
   ResetExtractionPromptResponse,
-  FetchMemoriesOptions,
-  FetchMemoriesResponse,
-  CreateSubAccountOptions,
-  CreateSubAccountResponse,
-  CreateSubAccountKeyOptions,
-  CreateSubAccountKeyResponse,
-  ListSubAccountsResponse,
-  GetSubAccountResponse,
-  RevokeSubAccountKeyResponse,
-  DeleteSubAccountResponse,
+  ListOptions,
+  ListResponse,
+  CreateContainerOptions,
+  CreateContainerResponse,
+  CreateContainerKeyOptions,
+  CreateContainerKeyResponse,
+  ListContainersResponse,
+  GetContainerOptions,
+  GetContainerResponse,
+  RevokeContainerKeyOptions,
+  RevokeContainerKeyResponse,
+  DeleteContainerOptions,
+  DeleteContainerResponse,
 } from "./types";
 
 const DEFAULT_BASE_URL = "https://api.withmemory.dev";
@@ -42,13 +48,19 @@ export class WithMemoryClient {
     this.registeredDefaults = { ...defaults };
   }
 
-
-  async set(userId: string, key: string, value: string): Promise<SetResponse> {
-    return this.request<SetResponse>("POST", "/v1/set", { userId, key, value });
+  async set(params: SetParams): Promise<SetResponse> {
+    return this.request<SetResponse>("POST", "/v1/set", {
+      forScope: params.forScope,
+      forKey: params.forKey,
+      value: params.value,
+    });
   }
 
-  async get(userId: string, key: string): Promise<GetResponse> {
-    return this.request<GetResponse>("POST", "/v1/get", { userId, key });
+  async get(params: GetParams): Promise<GetResponse> {
+    return this.request<GetResponse>("POST", "/v1/get", {
+      forScope: params.forScope,
+      forKey: params.forKey,
+    });
   }
 
   async recall(options: RecallOptions): Promise<RecallResponse> {
@@ -56,19 +68,30 @@ export class WithMemoryClient {
       ...this.registeredDefaults,
       ...(options.defaults ?? {}),
     };
-    const body = Object.keys(mergedDefaults).length > 0
-      ? { ...options, defaults: mergedDefaults }
-      : options;
+    const body: Record<string, unknown> = {
+      forScope: options.forScope,
+      query: options.query,
+    };
+    if (options.maxItems !== undefined) body.maxItems = options.maxItems;
+    if (options.maxTokens !== undefined) body.maxTokens = options.maxTokens;
+    if (Object.keys(mergedDefaults).length > 0) body.defaults = mergedDefaults;
     return this.request<RecallResponse>("POST", "/v1/recall", body);
   }
 
-  async remove(userId: string, key: string): Promise<RemoveResponse> {
-    return this.request<RemoveResponse>("POST", "/v1/remove", { userId, key });
+  async remove(params: RemoveParams): Promise<RemoveResponse> {
+    return this.request<RemoveResponse>("POST", "/v1/remove", {
+      forScope: params.forScope,
+      forKey: params.forKey,
+    });
   }
 
   async commit(options: CommitOptions): Promise<void> {
     try {
-      await this.request<void>("POST", "/v1/commit", options);
+      await this.request<void>("POST", "/v1/commit", {
+        forScope: options.forScope,
+        input: options.input,
+        output: options.output,
+      });
     } catch (err: unknown) {
       console.warn(
         "[@withmemory/sdk] commit() failed silently:",
@@ -77,8 +100,27 @@ export class WithMemoryClient {
     }
   }
 
-  async fetchMemories(options?: FetchMemoriesOptions): Promise<FetchMemoriesResponse> {
-    return this.request<FetchMemoriesResponse>("POST", "/v1/memories/list", options ?? {});
+  async list(options?: ListOptions): Promise<ListResponse> {
+    const body: Record<string, unknown> = {};
+    if (options) {
+      if (options.forScope !== undefined) body.forScope = options.forScope;
+      if (options.source !== undefined) body.source = options.source;
+      if (options.search !== undefined) body.search = options.search;
+      if (options.createdAfter !== undefined) body.createdAfter = options.createdAfter;
+      if (options.createdBefore !== undefined) body.createdBefore = options.createdBefore;
+      if (options.orderBy !== undefined) body.orderBy = options.orderBy;
+      if (options.orderDir !== undefined) body.orderDir = options.orderDir;
+      if (options.limit !== undefined) body.limit = options.limit;
+      if (options.cursor !== undefined) body.cursor = options.cursor;
+      if (options.includeTotal !== undefined) body.includeTotal = options.includeTotal;
+    }
+    return this.request<ListResponse>("POST", "/v1/memories/list", body);
+  }
+
+  /** @deprecated Use list() instead */
+  async fetchMemories(options?: ListOptions): Promise<ListResponse> {
+    console.warn("[@withmemory/sdk] fetchMemories() is deprecated. Use list() instead.");
+    return this.list(options);
   }
 
   async deleteMemory(memoryId: string): Promise<RemoveResponse> {
@@ -111,47 +153,74 @@ export class WithMemoryClient {
     );
   }
 
-  // ─── Sub-Accounts namespace ─────────────────────────────────────────────
-  readonly subAccounts = {
-    create: (options: CreateSubAccountOptions): Promise<CreateSubAccountResponse> => {
-      return this.request<CreateSubAccountResponse>("POST", "/v1/sub-accounts", options);
+  // ─── Containers namespace (formerly subAccounts) ────────────────────────
+  readonly containers = {
+    create: (options: CreateContainerOptions): Promise<CreateContainerResponse> => {
+      return this.request<CreateContainerResponse>("POST", "/v1/containers", options);
     },
 
-    createKey: (
-      accountId: string,
-      options: CreateSubAccountKeyOptions
-    ): Promise<CreateSubAccountKeyResponse> => {
-      return this.request<CreateSubAccountKeyResponse>(
+    createKey: (options: CreateContainerKeyOptions): Promise<CreateContainerKeyResponse> => {
+      const { forContainer, ...body } = options;
+      return this.request<CreateContainerKeyResponse>(
         "POST",
-        `/v1/sub-accounts/${accountId}/keys`,
-        options
+        `/v1/containers/${forContainer}/keys`,
+        body
       );
     },
 
-    list: (): Promise<ListSubAccountsResponse> => {
-      return this.request<ListSubAccountsResponse>("GET", "/v1/sub-accounts");
+    list: (): Promise<ListContainersResponse> => {
+      return this.request<ListContainersResponse>("GET", "/v1/containers");
     },
 
-    get: (accountId: string): Promise<GetSubAccountResponse> => {
-      return this.request<GetSubAccountResponse>("GET", `/v1/sub-accounts/${accountId}`);
+    get: (options: GetContainerOptions): Promise<GetContainerResponse> => {
+      return this.request<GetContainerResponse>(
+        "GET",
+        `/v1/containers/${options.forContainer}`
+      );
     },
 
-    revokeKey: (accountId: string, keyId: string): Promise<RevokeSubAccountKeyResponse> => {
-      return this.request<RevokeSubAccountKeyResponse>(
+    revokeKey: (options: RevokeContainerKeyOptions): Promise<RevokeContainerKeyResponse> => {
+      return this.request<RevokeContainerKeyResponse>(
         "DELETE",
-        `/v1/sub-accounts/${accountId}/keys/${keyId}`
+        `/v1/containers/${options.forContainer}/keys/${options.forKey}`
       );
     },
 
-    delete: (
-      accountId: string,
-      options: { confirm: true }
-    ): Promise<DeleteSubAccountResponse> => {
-      return this.request<DeleteSubAccountResponse>(
+    delete: (options: DeleteContainerOptions): Promise<DeleteContainerResponse> => {
+      return this.request<DeleteContainerResponse>(
         "DELETE",
-        `/v1/sub-accounts/${accountId}`,
-        options
+        `/v1/containers/${options.forContainer}`,
+        { confirm: options.confirm }
       );
+    },
+  };
+
+  // ─── Deprecated subAccounts namespace ───────────────────────────────────
+  /** @deprecated Use containers instead */
+  readonly subAccounts = {
+    create: (options: CreateContainerOptions): Promise<CreateContainerResponse> => {
+      console.warn("[@withmemory/sdk] subAccounts is deprecated. Use containers instead.");
+      return this.containers.create(options);
+    },
+    createKey: (accountId: string, options: { issuedTo: string; scopes?: string; expiresIn?: number }): Promise<CreateContainerKeyResponse> => {
+      console.warn("[@withmemory/sdk] subAccounts is deprecated. Use containers instead.");
+      return this.containers.createKey({ forContainer: accountId, ...options });
+    },
+    list: (): Promise<ListContainersResponse> => {
+      console.warn("[@withmemory/sdk] subAccounts is deprecated. Use containers instead.");
+      return this.containers.list();
+    },
+    get: (accountId: string): Promise<GetContainerResponse> => {
+      console.warn("[@withmemory/sdk] subAccounts is deprecated. Use containers instead.");
+      return this.containers.get({ forContainer: accountId });
+    },
+    revokeKey: (accountId: string, keyId: string): Promise<RevokeContainerKeyResponse> => {
+      console.warn("[@withmemory/sdk] subAccounts is deprecated. Use containers instead.");
+      return this.containers.revokeKey({ forContainer: accountId, forKey: keyId });
+    },
+    delete: (accountId: string, options: { confirm: true }): Promise<DeleteContainerResponse> => {
+      console.warn("[@withmemory/sdk] subAccounts is deprecated. Use containers instead.");
+      return this.containers.delete({ forContainer: accountId, ...options });
     },
   };
 

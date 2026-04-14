@@ -54,7 +54,7 @@ async function updateTestAccount(patch: {
   }
 }
 
-const userId = `e2e_test_${Date.now()}`;
+const forScope = `e2e_test_${Date.now()}`;
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -96,7 +96,7 @@ let firstMemoryId: string;
 tests.push({
   name: "Recall on nonexistent user returns empty",
   fn: async () => {
-    const res = await apiCall("/v1/recall", { userId, input: "hello" });
+    const res = await apiCall("/v1/recall", { forScope, query: "hello" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.context === "", `expected empty context, got "${res.body.context}"`);
     assert(res.body.memories.length === 0, `expected 0 memories, got ${res.body.memories.length}`);
@@ -106,12 +106,12 @@ tests.push({
 tests.push({
   name: "Set first memory: name",
   fn: async () => {
-    const res = await apiCall("/v1/set", { userId, key: "name", value: "Andrew" });
+    const res = await apiCall("/v1/set", { forScope, forKey: "name", value: "Andrew" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memory.source === "explicit", `expected source "explicit"`);
-    assert(res.body.memory.key === "name", `expected key "name"`);
+    assert(res.body.memory.forKey === "name", `expected key "name"`);
     assert(res.body.memory.value === "Andrew", `expected value "Andrew"`);
-    assert(res.body.memory.userId === userId, `expected userId "${userId}"`);
+    assert(res.body.memory.forScope === forScope, `expected forScope "${forScope}"`);
     firstMemoryId = res.body.memory.id;
   },
 });
@@ -119,9 +119,9 @@ tests.push({
 tests.push({
   name: "Set second memory: role",
   fn: async () => {
-    const res = await apiCall("/v1/set", { userId, key: "role", value: "engineer" });
+    const res = await apiCall("/v1/set", { forScope, forKey: "role", value: "engineer" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
-    assert(res.body.memory.key === "role", `expected key "role"`);
+    assert(res.body.memory.forKey === "role", `expected key "role"`);
     assert(res.body.memory.value === "engineer", `expected value "engineer"`);
   },
 });
@@ -129,9 +129,9 @@ tests.push({
 tests.push({
   name: "Set third memory: subscription",
   fn: async () => {
-    const res = await apiCall("/v1/set", { userId, key: "subscription", value: "pro" });
+    const res = await apiCall("/v1/set", { forScope, forKey: "subscription", value: "pro" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
-    assert(res.body.memory.key === "subscription", `expected key "subscription"`);
+    assert(res.body.memory.forKey === "subscription", `expected key "subscription"`);
     assert(res.body.memory.value === "pro", `expected value "pro"`);
   },
 });
@@ -139,7 +139,7 @@ tests.push({
 tests.push({
   name: "Recall returns all three memories",
   fn: async () => {
-    const res = await apiCall("/v1/recall", { userId, input: "tell me about myself" });
+    const res = await apiCall("/v1/recall", { forScope, query: "tell me about myself" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memories.length === 3, `expected 3 memories, got ${res.body.memories.length}`);
     assert(res.body.context.length > 0, "expected non-empty context");
@@ -163,7 +163,7 @@ tests.push({
 tests.push({
   name: "Recall with maxItems=2 returns 2 memories",
   fn: async () => {
-    const res = await apiCall("/v1/recall", { userId, input: "hi", maxItems: 2 });
+    const res = await apiCall("/v1/recall", { forScope, query: "hi", maxItems: 2 });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memories.length === 2, `expected 2 memories, got ${res.body.memories.length}`);
   },
@@ -172,7 +172,7 @@ tests.push({
 tests.push({
   name: "Upsert updates existing memory",
   fn: async () => {
-    const res = await apiCall("/v1/set", { userId, key: "name", value: "Andrew Gierke" });
+    const res = await apiCall("/v1/set", { forScope, forKey: "name", value: "Andrew Gierke" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(
       res.body.memory.id === firstMemoryId,
@@ -189,9 +189,9 @@ tests.push({
 tests.push({
   name: "Recall after upsert reflects the change",
   fn: async () => {
-    const res = await apiCall("/v1/recall", { userId, input: "who am i" });
+    const res = await apiCall("/v1/recall", { forScope, query: "who am i" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
-    const nameMem = res.body.memories.find((m: any) => m.key === "name");
+    const nameMem = res.body.memories.find((m: any) => m.forKey === "name");
     assert(nameMem !== undefined, "expected to find name memory in recall");
     assert(nameMem.value === "Andrew Gierke", `expected value "Andrew Gierke", got "${nameMem.value}"`);
   },
@@ -202,7 +202,7 @@ tests.push({
   fn: async () => {
     const res = await apiCall(
       "/v1/set",
-      { userId, key: "x", value: "y" },
+      { forScope, forKey: "x", value: "y" },
       { key: "wm_test_definitely_not_valid" }
     );
     assert(res.status === 401, `expected 401, got ${res.status}`);
@@ -216,7 +216,7 @@ tests.push({
 tests.push({
   name: "Validation failure returns 400",
   fn: async () => {
-    const res = await apiCall("/v1/set", { userId: "x" });
+    const res = await apiCall("/v1/set", { forScope: "x" });
     assert(res.status === 400, `expected 400, got ${res.status}`);
     assert(
       res.body.error?.code === "invalid_request",
@@ -230,10 +230,10 @@ tests.push({
 tests.push({
   name: "Get existing memory by key",
   fn: async () => {
-    const res = await apiCall("/v1/get", { userId, key: "name" });
+    const res = await apiCall("/v1/get", { forScope, forKey: "name" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memory !== null, "expected memory to be non-null");
-    assert(res.body.memory.key === "name", `expected key "name", got "${res.body.memory.key}"`);
+    assert(res.body.memory.forKey === "name", `expected forKey "name", got "${res.body.memory.forKey}"`);
     assert(
       res.body.memory.value === "Andrew Gierke",
       `expected value "Andrew Gierke", got "${res.body.memory.value}"`
@@ -244,7 +244,7 @@ tests.push({
 tests.push({
   name: "Get nonexistent key returns null memory",
   fn: async () => {
-    const res = await apiCall("/v1/get", { userId, key: "nonexistent_key" });
+    const res = await apiCall("/v1/get", { forScope, forKey: "nonexistent_key" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memory === null, `expected null memory, got ${JSON.stringify(res.body.memory)}`);
   },
@@ -253,7 +253,7 @@ tests.push({
 tests.push({
   name: "Get for nonexistent user returns null memory",
   fn: async () => {
-    const res = await apiCall("/v1/get", { userId: "no_such_user_ever", key: "name" });
+    const res = await apiCall("/v1/get", { forScope: "no_such_user_ever", forKey: "name" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memory === null, `expected null memory`);
   },
@@ -265,12 +265,12 @@ tests.push({
   name: "Remove existing memory returns deleted: true",
   fn: async () => {
     // Set a throwaway memory to remove
-    await apiCall("/v1/set", { userId, key: "to_delete", value: "temporary" });
-    const res = await apiCall("/v1/remove", { userId, key: "to_delete" });
+    await apiCall("/v1/set", { forScope, forKey: "to_delete", value: "temporary" });
+    const res = await apiCall("/v1/remove", { forScope, forKey: "to_delete" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.deleted === true, `expected deleted: true, got ${res.body.deleted}`);
     // Verify it's gone
-    const check = await apiCall("/v1/get", { userId, key: "to_delete" });
+    const check = await apiCall("/v1/get", { forScope, forKey: "to_delete" });
     assert(check.body.memory === null, "expected memory to be gone after remove");
   },
 });
@@ -278,7 +278,7 @@ tests.push({
 tests.push({
   name: "Remove nonexistent key returns deleted: false",
   fn: async () => {
-    const res = await apiCall("/v1/remove", { userId, key: "never_existed" });
+    const res = await apiCall("/v1/remove", { forScope, forKey: "never_existed" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.deleted === false, `expected deleted: false, got ${res.body.deleted}`);
   },
@@ -305,7 +305,7 @@ tests.push({
 tests.push({
   name: "Unknown /v1 route returns 404 with error envelope",
   fn: async () => {
-    const res = await apiCall("/v1/nonexistent", { userId });
+    const res = await apiCall("/v1/nonexistent", { forScope });
     assert(res.status === 404, `expected 404, got ${res.status}`);
     assert(
       res.body.error?.code === "not_found",
@@ -320,7 +320,7 @@ tests.push({
   name: "Commit returns 202 Accepted",
   fn: async () => {
     const res = await apiCall("/v1/commit", {
-      userId,
+      forScope,
       input: "My name is Andrew and I work at Acme Corp.",
       output: "Nice to meet you, Andrew!",
     });
@@ -333,7 +333,7 @@ tests.push({
   fn: async () => {
     const idemKey = `e2e_idem_${Date.now()}`;
     const body = {
-      userId,
+      forScope,
       input: "I prefer dark mode.",
       output: "Noted!",
     };
@@ -365,7 +365,7 @@ tests.push({
   name: "Commit rejects oversized payload",
   fn: async () => {
     const res = await apiCall("/v1/commit", {
-      userId,
+      forScope,
       input: "x".repeat(20000),
       output: "y",
     });
@@ -384,7 +384,7 @@ tests.push({
 tests.push({
   name: "Commit validation failure returns 400",
   fn: async () => {
-    const res = await apiCall("/v1/commit", { userId });
+    const res = await apiCall("/v1/commit", { forScope });
     assert(res.status === 400, `expected 400, got ${res.status}`);
     assert(
       res.body.error?.code === "invalid_request",
@@ -398,7 +398,7 @@ tests.push({
 tests.push({
   name: "List memories for user with memories",
   fn: async () => {
-    const res = await apiCall("/v1/memories/list", { userId });
+    const res = await apiCall("/v1/memories/list", { forScope });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(Array.isArray(res.body.memories), "expected memories array in envelope");
     assert(res.body.nextCursor === null || typeof res.body.nextCursor === "string", "expected nextCursor");
@@ -409,14 +409,14 @@ tests.push({
     assert(typeof first.id === "string", "expected id string");
     assert(typeof first.value === "string", "expected value string");
     assert(typeof first.source === "string", "expected source string");
-    assert(typeof first.userId === "string", "expected userId string");
+    assert(typeof first.forScope === "string", "expected forScope string");
   },
 });
 
 tests.push({
   name: "List memories for nonexistent user returns empty",
   fn: async () => {
-    const res = await apiCall("/v1/memories/list", { userId: "no_such_user_ever_memories" });
+    const res = await apiCall("/v1/memories/list", { forScope: "no_such_user_ever_memories" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(Array.isArray(res.body.memories), "expected memories array");
     assert(res.body.memories.length === 0, `expected 0 memories`);
@@ -427,11 +427,11 @@ tests.push({
 tests.push({
   name: "Account-wide listing returns memories across users",
   fn: async () => {
-    // No userId filter — should return all memories for the account
+    // No forScope filter — should return all memories for the account
     const res = await apiCall("/v1/memories/list", {});
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(Array.isArray(res.body.memories), "expected memories array");
-    // Should include at least the 3 memories from the test userId
+    // Should include at least the 3 memories from the test forScope
     assert(res.body.memories.length >= 3, `expected >= 3 memories, got ${res.body.memories.length}`);
   },
 });
@@ -439,7 +439,7 @@ tests.push({
 tests.push({
   name: "Source filter returns only explicit memories",
   fn: async () => {
-    const res = await apiCall("/v1/memories/list", { userId, source: "explicit" });
+    const res = await apiCall("/v1/memories/list", { forScope, source: "explicit" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     for (const m of res.body.memories) {
       assert(m.source === "explicit", `expected source "explicit", got "${m.source}"`);
@@ -452,21 +452,21 @@ tests.push({
   fn: async () => {
     // Set a memory with a unique searchable value
     const searchKey = `search_test_${Date.now()}`;
-    await apiCall("/v1/set", { userId, key: searchKey, value: "xylophone_uniquetoken_987" });
-    const res = await apiCall("/v1/memories/list", { userId, search: "xylophone_uniquetoken" });
+    await apiCall("/v1/set", { forScope, forKey: searchKey, value: "xylophone_uniquetoken_987" });
+    const res = await apiCall("/v1/memories/list", { forScope, search: "xylophone_uniquetoken" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memories.length >= 1, `expected >= 1 search result, got ${res.body.memories.length}`);
     const found = res.body.memories.some((m: any) => m.value === "xylophone_uniquetoken_987");
     assert(found, "expected to find memory with the unique search value");
     // Cleanup
-    await apiCall("/v1/remove", { userId, key: searchKey });
+    await apiCall("/v1/remove", { forScope, forKey: searchKey });
   },
 });
 
 tests.push({
   name: "includeTotal returns total count",
   fn: async () => {
-    const res = await apiCall("/v1/memories/list", { userId, includeTotal: true });
+    const res = await apiCall("/v1/memories/list", { forScope, includeTotal: true });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(typeof res.body.total === "number", `expected total to be a number, got ${typeof res.body.total}`);
     assert(res.body.total >= 3, `expected total >= 3, got ${res.body.total}`);
@@ -476,7 +476,7 @@ tests.push({
 tests.push({
   name: "includeTotal omitted when not requested",
   fn: async () => {
-    const res = await apiCall("/v1/memories/list", { userId });
+    const res = await apiCall("/v1/memories/list", { forScope });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(!("total" in res.body), `expected total to be absent, but it was present`);
   },
@@ -490,7 +490,7 @@ tests.push({
     // Create 8 memories for pagination testing
     for (let i = 1; i <= 8; i++) {
       const res = await apiCall("/v1/set", {
-        userId: paginationUserId,
+        forScope: paginationUserId,
         key: `page_key_${String(i).padStart(2, "0")}`,
         value: `page_value_${i}`,
       });
@@ -498,14 +498,14 @@ tests.push({
     }
 
     // Page 1: limit 5
-    const page1 = await apiCall("/v1/memories/list", { userId: paginationUserId, limit: 5 });
+    const page1 = await apiCall("/v1/memories/list", { forScope: paginationUserId, limit: 5 });
     assert(page1.status === 200, `page1: expected 200, got ${page1.status}`);
     assert(page1.body.memories.length === 5, `page1: expected 5, got ${page1.body.memories.length}`);
     assert(page1.body.nextCursor !== null, "page1: expected non-null nextCursor");
 
     // Page 2: use the cursor
     const page2 = await apiCall("/v1/memories/list", {
-      userId: paginationUserId,
+      forScope: paginationUserId,
       limit: 5,
       cursor: page1.body.nextCursor,
     });
@@ -526,7 +526,7 @@ tests.push({
 tests.push({
   name: "Invalid cursor returns 400",
   fn: async () => {
-    const res = await apiCall("/v1/memories/list", { userId, cursor: "not-valid-base64-json!" });
+    const res = await apiCall("/v1/memories/list", { forScope, cursor: "not-valid-base64-json!" });
     assert(res.status === 400, `expected 400, got ${res.status}`);
     assert(
       res.body.error?.code === "invalid_request",
@@ -544,7 +544,7 @@ tests.push({
   fn: async () => {
     // Create a memory, then mark it superseded via direct DB
     const superKey = `supersede_test_${Date.now()}`;
-    const setRes = await apiCall("/v1/set", { userId, key: superKey, value: "will be superseded" });
+    const setRes = await apiCall("/v1/set", { forScope, forKey: superKey, value: "will be superseded" });
     assert(setRes.status === 200, `set: expected 200, got ${setRes.status}`);
     const memId = setRes.body.memory.id;
 
@@ -556,21 +556,21 @@ tests.push({
     `;
 
     // Verify it's NOT in the list
-    const listRes = await apiCall("/v1/memories/list", { userId, search: superKey });
+    const listRes = await apiCall("/v1/memories/list", { forScope, search: superKey });
     assert(listRes.status === 200, `list: expected 200, got ${listRes.status}`);
     const found = listRes.body.memories.some((m: any) => m.id === memId);
     assert(!found, "expected superseded memory to NOT appear in list");
 
     // Cleanup: delete (won't match since superseded, but clean up by unsuperseding first)
     await testDb`UPDATE wm_memories SET superseded_by = NULL WHERE id = ${memId}::uuid`;
-    await apiCall("/v1/remove", { userId, key: superKey });
+    await apiCall("/v1/remove", { forScope, forKey: superKey });
   },
 });
 
 tests.push({
   name: "Old POST /v1/memories returns 404 (breaking change)",
   fn: async () => {
-    const res = await apiCall("/v1/memories", { userId });
+    const res = await apiCall("/v1/memories", { forScope });
     assert(res.status === 404, `expected 404 for old route, got ${res.status}`);
     assert(
       res.body.error?.code === "not_found",
@@ -585,7 +585,7 @@ tests.push({
   name: "Delete memory by ID returns deleted: true",
   fn: async () => {
     // Set a throwaway memory, then delete by ID
-    const setRes = await apiCall("/v1/set", { userId, key: "to_delete_by_id", value: "temp" });
+    const setRes = await apiCall("/v1/set", { forScope, forKey: "to_delete_by_id", value: "temp" });
     assert(setRes.status === 200, `set: expected 200, got ${setRes.status}`);
     const memId = setRes.body.memory.id;
 
@@ -598,7 +598,7 @@ tests.push({
     assert(delBody.deleted === true, `expected deleted: true`);
 
     // Verify it's gone via get
-    const getRes = await apiCall("/v1/get", { userId, key: "to_delete_by_id" });
+    const getRes = await apiCall("/v1/get", { forScope, forKey: "to_delete_by_id" });
     assert(getRes.body.memory === null, "expected memory to be gone after delete");
   },
 });
@@ -635,8 +635,8 @@ tests.push({
   name: "Recall with defaults for nonexistent user returns defaults in context",
   fn: async () => {
     const res = await apiCall("/v1/recall", {
-      userId: "recall_defaults_test_user",
-      input: "hello",
+      forScope: "recall_defaults_test_user",
+      query: "hello",
       defaults: { plan: "pro", tier: "beta" },
     });
     assert(res.status === 200, `expected 200, got ${res.status}`);
@@ -654,8 +654,8 @@ tests.push({
     const client = createClient({ apiKey: API_KEY!, baseUrl: BASE_URL });
     client.register({ theme: "dark", language: "en" });
     const result = await client.recall({
-      userId: "sdk_register_test_nonexistent_user",
-      input: "hello",
+      forScope: "sdk_register_test_nonexistent_user",
+      query: "hello",
     });
     assert(result.context.includes("theme: dark"), `expected "theme: dark" in context`);
     assert(
@@ -774,7 +774,7 @@ if (API_KEY_B) {
     name: "Cross-account delete returns deleted: false (ownership boundary)",
     fn: async () => {
       // 1. Create a memory under Account A
-      const setRes = await apiCall("/v1/set", { userId, key: "cross_acct_test", value: "secret" });
+      const setRes = await apiCall("/v1/set", { forScope, forKey: "cross_acct_test", value: "secret" });
       assert(setRes.status === 200, `set: expected 200, got ${setRes.status}`);
       const memId = setRes.body.memory.id;
 
@@ -791,7 +791,7 @@ if (API_KEY_B) {
       );
 
       // 3. Verify the memory still exists via Account A
-      const getRes = await apiCall("/v1/get", { userId, key: "cross_acct_test" });
+      const getRes = await apiCall("/v1/get", { forScope, forKey: "cross_acct_test" });
       assert(
         getRes.body.memory !== null,
         "expected memory to still exist after cross-account delete attempt"
@@ -826,9 +826,9 @@ tests.push({
   fn: async () => {
     // First, clean up any stale quota test memories from prior failed runs
     for (let i = 1; i <= 3; i++) {
-      await apiCall("/v1/remove", { userId: quotaUserId, key: `quota_key_${i}` });
+      await apiCall("/v1/remove", { forScope: quotaUserId, forKey: `quota_key_${i}` });
     }
-    await apiCall("/v1/remove", { userId: quotaUserId, key: "quota_key_4" });
+    await apiCall("/v1/remove", { forScope: quotaUserId, forKey: "quota_key_4" });
 
     // Query current memory count so we can set the limit relative to it.
     // The account already has memories from earlier tests in this run,
@@ -845,8 +845,8 @@ tests.push({
       // Create 3 memories — should succeed
       for (let i = 1; i <= 3; i++) {
         const res = await apiCall("/v1/set", {
-          userId: quotaUserId,
-          key: `quota_key_${i}`,
+          forScope: quotaUserId,
+          forKey: `quota_key_${i}`,
           value: `value_${i}`,
         });
         assert(res.status === 200, `set ${i}/3: expected 200, got ${res.status}`);
@@ -862,8 +862,8 @@ tests.push({
 
       // 4th should be rejected — limit is exactly the current count
       const res = await apiCall("/v1/set", {
-        userId: quotaUserId,
-        key: "quota_key_4",
+        forScope: quotaUserId,
+        forKey: "quota_key_4",
         value: "should_fail",
       });
       assert(res.status === 403, `4th set: expected 403, got ${res.status}`);
@@ -883,7 +883,7 @@ tests.push({
       // Teardown: restore limit and clean up memories via remove
       await updateTestAccount({ memory_limit: 1000 });
       for (let i = 1; i <= 3; i++) {
-        await apiCall("/v1/remove", { userId: quotaUserId, key: `quota_key_${i}` });
+        await apiCall("/v1/remove", { forScope: quotaUserId, forKey: `quota_key_${i}` });
       }
     }
   },
@@ -895,7 +895,7 @@ tests.push({
     await updateTestAccount({ memory_limit: 0 });
     try {
       const res = await apiCall("/v1/commit", {
-        userId: quotaUserId,
+        forScope: quotaUserId,
         input: "My favorite color is blue.",
         output: "Got it!",
       });
@@ -985,7 +985,7 @@ async function main() {
 
   console.log(`\n▶ Running WithMemory E2E tests`);
   console.log(`  Base URL:    ${BASE_URL}`);
-  console.log(`  User ID:     ${userId}`);
+  console.log(`  Scope:       ${forScope}`);
   console.log(`  Account ID:  ${testAccountId}\n`);
 
   try {

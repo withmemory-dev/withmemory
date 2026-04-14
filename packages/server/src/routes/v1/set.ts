@@ -2,7 +2,12 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import * as schema from "../../db/schema";
-import { USER_ID_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
+import {
+  SCOPE_MAX_LENGTH,
+  zodErrorHook,
+  normalizeParams,
+  setDeprecationHeader,
+} from "../../lib/validation";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { ensureEndUser } from "../../lib/end-users";
 import { embedTexts } from "../../lib/embeddings";
@@ -10,21 +15,38 @@ import { checkMemoryQuota, PlanEnforcementError } from "../../lib/plan-enforceme
 
 const { wmMemories } = schema;
 
+// Accept both old (userId, key) and new (forScope, forKey) parameter names
 const SetRequestSchema = z.object({
-  userId: z.string().min(1).max(USER_ID_MAX_LENGTH),
-  key: z.string().min(1).max(128),
+  forScope: z.string().min(1).max(SCOPE_MAX_LENGTH),
+  forKey: z.string().min(1).max(128),
   value: z.string().min(1).max(4096),
 });
-
-const validator = zValidator("json", SetRequestSchema, zodErrorHook);
 
 export function setRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
-  app.post("/set", validator, async (c) => {
+  app.post("/set", async (c) => {
+    const rawBody = await c.req.json();
+    const { normalized, warnings } = normalizeParams(rawBody, ["userId", "key"]);
+    setDeprecationHeader(c, warnings);
+
+    const parsed = SetRequestSchema.safeParse(normalized);
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: {
+            code: "invalid_request",
+            message: "Invalid request body",
+            details: parsed.error.issues,
+          },
+        },
+        400
+      );
+    }
+
     const db = c.get("db");
     const account = c.get("account");
-    const { userId, key, value } = c.req.valid("json");
+    const { forScope, forKey, value } = parsed.data;
 
     // Quota check: reject before any DB write or embedding API call
     try {
@@ -34,13 +56,9 @@ export function setRoute() {
       throw e;
     }
 
-    const endUser = await ensureEndUser(db, account.id, userId);
+    const endUser = await ensureEndUser(db, account.id, forScope);
 
     // Generate embedding for the value (best-effort, null on failure).
-    // Terse values (< 30 chars, e.g. "Andrew", "pro") embed poorly and
-    // would be unfairly killed by the similarity floor. They store
-    // embedding: null and get the 0.5 fallback score via the existing
-    // null-embedding path, which bypasses the floor.
     let embedding: number[] | null = null;
     const apiKey = c.env.OPENAI_API_KEY;
     if (apiKey && value.length >= 20) {
@@ -49,7 +67,7 @@ export function setRoute() {
         embedding = results[0] ?? null;
       } catch (err) {
         console.warn(
-          `set: embedding failed for key="${key}" (account=${account.id}): ${
+          `set: embedding failed for forKey="${forKey}" (account=${account.id}): ${
             err instanceof Error ? err.message : "unknown error"
           }`
         );
@@ -62,7 +80,7 @@ export function setRoute() {
       .values({
         accountId: account.id,
         endUserId: endUser.id,
-        key,
+        key: forKey,
         content: value,
         source: "explicit",
         embedding,
@@ -80,8 +98,8 @@ export function setRoute() {
     return c.json({
       memory: {
         id: memory.id,
-        userId: userId,
-        key: memory.key!,
+        forScope: forScope,
+        forKey: memory.key!,
         value: memory.content,
         source: memory.source,
         createdAt: memory.createdAt.toISOString(),

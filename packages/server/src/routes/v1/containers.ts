@@ -10,8 +10,8 @@ import { sha256Hex } from "../../lib/hash";
 
 const { wmAccounts, wmApiKeys, wmMemories } = schema;
 
-// ─── Sub-account limits per plan tier ──────────────────────────────────────
-const SUB_ACCOUNT_LIMITS: Record<string, number> = {
+// ─── Container limits per plan tier ──────────────────────────────────────
+const CONTAINER_LIMITS: Record<string, number> = {
   pro: 10,
   team: 100,
   enterprise: Infinity,
@@ -25,12 +25,12 @@ function requireAdminScope(c: {
   const account = c.get("account");
   const apiKey = c.get("apiKey");
 
-  // Sub-accounts cannot call sub-account management endpoints
+  // Containers (formerly sub-accounts) cannot call container management endpoints
   if (account.parentAccountId !== null) {
     return {
       error: {
         code: "unauthorized",
-        message: "Sub-accounts cannot manage other sub-accounts",
+        message: "Containers cannot manage other containers",
       } as const,
     };
   }
@@ -49,8 +49,7 @@ function requireAdminScope(c: {
 }
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────
-
-const CreateAccountSchema = z.object({
+const CreateContainerSchema = z.object({
   name: z.string().min(1).max(255),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
@@ -61,19 +60,19 @@ const CreateKeySchema = z.object({
   expiresIn: z.number().int().min(1).max(31536000).optional(),
 });
 
-const DeleteAccountSchema = z.object({
+const DeleteContainerSchema = z.object({
   confirm: z.literal(true),
 });
 
 // ─── Route factory ──────────────────────────────────────────────────────────
 
-export function subAccountsRoute() {
+export function containersRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
-  // ─── POST /sub-accounts — create a sub-account ───────────────────────
+  // ─── POST /containers — create a container ──────────────────────────
   app.post(
-    "/sub-accounts",
-    zValidator("json", CreateAccountSchema, zodErrorHook),
+    "/containers",
+    zValidator("json", CreateContainerSchema, zodErrorHook),
     async (c) => {
       const scopeError = requireAdminScope(c);
       if (scopeError) return c.json(scopeError, 401);
@@ -89,8 +88,8 @@ export function subAccountsRoute() {
         throw e;
       }
 
-      // Check sub-account limit
-      const limit = SUB_ACCOUNT_LIMITS[account.planTier] ?? 0;
+      // Check container limit
+      const limit = CONTAINER_LIMITS[account.planTier] ?? 0;
       const [countRow] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(wmAccounts)
@@ -101,8 +100,8 @@ export function subAccountsRoute() {
         return c.json(
           {
             error: {
-              code: "sub_account_limit_exceeded",
-              message: `Sub-account limit reached (${current} / ${limit}). Upgrade to increase your limit.`,
+              code: "container_limit_exceeded",
+              message: `Container limit reached (${current} / ${limit}). Upgrade to increase your limit.`,
               details: { current, limit, plan_tier: account.planTier },
             },
           },
@@ -110,12 +109,11 @@ export function subAccountsRoute() {
         );
       }
 
-      // Sub-accounts use a generated email to satisfy the NOT NULL unique constraint.
-      // Format: sub_{randomHex}@sub.withmemory.internal
+      // Containers use a generated email to satisfy the NOT NULL unique constraint.
       const subEmailSuffix = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
       const subEmail = `sub_${subEmailSuffix}@sub.withmemory.internal`;
 
-      const [subAccount] = await db
+      const [container] = await db
         .insert(wmAccounts)
         .values({
           email: subEmail,
@@ -130,13 +128,13 @@ export function subAccountsRoute() {
       return c.json(
         {
           account: {
-            id: subAccount.id,
-            parentAccountId: subAccount.parentAccountId,
-            name: subAccount.name,
-            metadata: subAccount.metadata ?? {},
-            planTier: subAccount.planTier,
-            memoryLimit: subAccount.memoryLimit,
-            createdAt: subAccount.createdAt.toISOString(),
+            id: container.id,
+            parentAccountId: container.parentAccountId,
+            name: container.name,
+            metadata: container.metadata ?? {},
+            planTier: container.planTier,
+            memoryLimit: container.memoryLimit,
+            createdAt: container.createdAt.toISOString(),
           },
         },
         201
@@ -144,9 +142,9 @@ export function subAccountsRoute() {
     }
   );
 
-  // ─── POST /sub-accounts/:id/keys — mint a sub-account key ────────────
+  // ─── POST /containers/:id/keys — mint a container key ───────────────
   app.post(
-    "/sub-accounts/:id/keys",
+    "/containers/:id/keys",
     zValidator("json", CreateKeySchema, zodErrorHook),
     async (c) => {
       const scopeError = requireAdminScope(c);
@@ -155,7 +153,7 @@ export function subAccountsRoute() {
       const db = c.get("db");
       const account = c.get("account");
       const apiKey = c.get("apiKey");
-      const subAccountId = c.req.param("id");
+      const containerId = c.req.param("id");
       const { issuedTo, scopes, expiresIn } = c.req.valid("json");
 
       try {
@@ -165,31 +163,31 @@ export function subAccountsRoute() {
         throw e;
       }
 
-      // Validate scopes: account:admin is not allowed on sub-account keys
+      // Validate scopes: account:admin is not allowed on container keys
       const resolvedScopes = scopes ?? "memory:read,memory:write";
       if (resolvedScopes.includes("account:admin")) {
         return c.json(
           {
             error: {
               code: "invalid_request",
-              message: "Sub-account keys cannot have account:admin scope",
+              message: "Container keys cannot have account:admin scope",
             },
           },
           400
         );
       }
 
-      // Verify sub-account exists and belongs to this parent
-      const [subAccount] = await db
+      // Verify container exists and belongs to this parent
+      const [container] = await db
         .select()
         .from(wmAccounts)
         .where(
-          and(eq(wmAccounts.id, subAccountId), eq(wmAccounts.parentAccountId, account.id))
+          and(eq(wmAccounts.id, containerId), eq(wmAccounts.parentAccountId, account.id))
         )
         .limit(1);
 
-      if (!subAccount) {
-        return c.json({ error: { code: "not_found", message: "Sub-account not found" } }, 404);
+      if (!container) {
+        return c.json({ error: { code: "not_found", message: "Container not found" } }, 404);
       }
 
       // Generate raw key: wm_live_ + base64url(32 random bytes)
@@ -208,7 +206,7 @@ export function subAccountsRoute() {
       const [newKey] = await db
         .insert(wmApiKeys)
         .values({
-          accountId: subAccountId,
+          accountId: containerId,
           keyHash,
           keyPrefix,
           scopes: resolvedScopes,
@@ -236,8 +234,8 @@ export function subAccountsRoute() {
     }
   );
 
-  // ─── GET /sub-accounts — list sub-accounts ────────────────────────────
-  app.get("/sub-accounts", async (c) => {
+  // ─── GET /containers — list containers ────────────────────────────────
+  app.get("/containers", async (c) => {
     const scopeError = requireAdminScope(c);
     if (scopeError) return c.json(scopeError, 401);
 
@@ -251,8 +249,7 @@ export function subAccountsRoute() {
       throw e;
     }
 
-    // Fetch sub-accounts with memory counts via a subquery
-    const subAccounts = await db
+    const containers = await db
       .select({
         id: wmAccounts.id,
         parentAccountId: wmAccounts.parentAccountId,
@@ -269,26 +266,26 @@ export function subAccountsRoute() {
       .where(eq(wmAccounts.parentAccountId, account.id));
 
     return c.json({
-      accounts: subAccounts.map((sa) => ({
-        id: sa.id,
-        parentAccountId: sa.parentAccountId,
-        name: sa.name,
-        metadata: sa.metadata ?? {},
-        memoryCount: sa.memoryCount,
-        createdAt: sa.createdAt.toISOString(),
+      accounts: containers.map((ct) => ({
+        id: ct.id,
+        parentAccountId: ct.parentAccountId,
+        name: ct.name,
+        metadata: ct.metadata ?? {},
+        memoryCount: ct.memoryCount,
+        createdAt: ct.createdAt.toISOString(),
       })),
-      total: subAccounts.length,
+      total: containers.length,
     });
   });
 
-  // ─── GET /sub-accounts/:id — get a specific sub-account ───────────────
-  app.get("/sub-accounts/:id", async (c) => {
+  // ─── GET /containers/:id — get a specific container ───────────────────
+  app.get("/containers/:id", async (c) => {
     const scopeError = requireAdminScope(c);
     if (scopeError) return c.json(scopeError, 401);
 
     const db = c.get("db");
     const account = c.get("account");
-    const subAccountId = c.req.param("id");
+    const containerId = c.req.param("id");
 
     try {
       requirePlan(account, ["pro", "team", "enterprise"]);
@@ -297,60 +294,56 @@ export function subAccountsRoute() {
       throw e;
     }
 
-    const [subAccount] = await db
+    const [container] = await db
       .select()
       .from(wmAccounts)
       .where(
-        and(eq(wmAccounts.id, subAccountId), eq(wmAccounts.parentAccountId, account.id))
+        and(eq(wmAccounts.id, containerId), eq(wmAccounts.parentAccountId, account.id))
       )
       .limit(1);
 
-    if (!subAccount) {
-      return c.json({ error: { code: "not_found", message: "Sub-account not found" } }, 404);
+    if (!container) {
+      return c.json({ error: { code: "not_found", message: "Container not found" } }, 404);
     }
 
-    // Count active memories and active keys
     const [[memoryRow], [keyRow]] = await Promise.all([
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(wmMemories)
         .where(
-          and(eq(wmMemories.accountId, subAccountId), isNull(wmMemories.supersededBy))
+          and(eq(wmMemories.accountId, containerId), isNull(wmMemories.supersededBy))
         ),
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(wmApiKeys)
         .where(
-          and(eq(wmApiKeys.accountId, subAccountId), isNull(wmApiKeys.revokedAt))
+          and(eq(wmApiKeys.accountId, containerId), isNull(wmApiKeys.revokedAt))
         ),
     ]);
 
     return c.json({
       account: {
-        id: subAccount.id,
-        parentAccountId: subAccount.parentAccountId,
-        name: subAccount.name,
-        metadata: subAccount.metadata ?? {},
+        id: container.id,
+        parentAccountId: container.parentAccountId,
+        name: container.name,
+        metadata: container.metadata ?? {},
         memoryCount: memoryRow?.count ?? 0,
         activeKeyCount: keyRow?.count ?? 0,
-        createdAt: subAccount.createdAt.toISOString(),
+        createdAt: container.createdAt.toISOString(),
       },
     });
   });
 
-  // ─── DELETE /sub-accounts/:id/keys/:keyId — revoke a sub-account key ──
-  app.delete("/sub-accounts/:id/keys/:keyId", async (c) => {
+  // ─── DELETE /containers/:id/keys/:keyId — revoke a container key ──────
+  app.delete("/containers/:id/keys/:keyId", async (c) => {
     const scopeError = requireAdminScope(c);
     if (scopeError) return c.json(scopeError, 401);
 
     const db = c.get("db");
     const account = c.get("account");
-    const subAccountId = c.req.param("id");
+    const containerId = c.req.param("id");
     const keyId = c.req.param("keyId");
 
-    // Verify the sub-account belongs to this parent AND the key belongs to
-    // the sub-account. Use a single query to prevent UUID enumeration —
-    // all three failure cases return the same 404.
     const [targetKey] = await db
       .select({ id: wmApiKeys.id })
       .from(wmApiKeys)
@@ -358,7 +351,7 @@ export function subAccountsRoute() {
       .where(
         and(
           eq(wmApiKeys.id, keyId),
-          eq(wmApiKeys.accountId, subAccountId),
+          eq(wmApiKeys.accountId, containerId),
           eq(wmAccounts.parentAccountId, account.id),
           isNull(wmApiKeys.revokedAt)
         )
@@ -375,36 +368,58 @@ export function subAccountsRoute() {
     return c.json({ revoked: true, revokedAt: now.toISOString() });
   });
 
-  // ─── DELETE /sub-accounts/:id — delete a sub-account ──────────────────
+  // ─── DELETE /containers/:id — delete a container ──────────────────────
   app.delete(
-    "/sub-accounts/:id",
-    zValidator("json", DeleteAccountSchema, zodErrorHook),
+    "/containers/:id",
+    zValidator("json", DeleteContainerSchema, zodErrorHook),
     async (c) => {
       const scopeError = requireAdminScope(c);
       if (scopeError) return c.json(scopeError, 401);
 
       const db = c.get("db");
       const account = c.get("account");
-      const subAccountId = c.req.param("id");
+      const containerId = c.req.param("id");
 
-      const [subAccount] = await db
+      const [container] = await db
         .select({ id: wmAccounts.id })
         .from(wmAccounts)
         .where(
-          and(eq(wmAccounts.id, subAccountId), eq(wmAccounts.parentAccountId, account.id))
+          and(eq(wmAccounts.id, containerId), eq(wmAccounts.parentAccountId, account.id))
         )
         .limit(1);
 
-      if (!subAccount) {
-        return c.json({ error: { code: "not_found", message: "Sub-account not found" } }, 404);
+      if (!container) {
+        return c.json({ error: { code: "not_found", message: "Container not found" } }, 404);
       }
 
       // FK CASCADE handles memories, end users, keys
-      await db.delete(wmAccounts).where(eq(wmAccounts.id, subAccountId));
+      await db.delete(wmAccounts).where(eq(wmAccounts.id, containerId));
 
       return c.json({ deleted: true });
     }
   );
+
+  return app;
+}
+
+// ─── Legacy redirects for /sub-accounts/* → /containers/* ─────────────────
+
+export function subAccountsRedirectRoute() {
+  const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
+
+  app.all("/sub-accounts/*", (c) => {
+    const newPath = c.req.path.replace("/sub-accounts", "/containers");
+    const url = new URL(c.req.url);
+    url.pathname = url.pathname.replace("/sub-accounts", "/containers");
+    return c.redirect(url.toString(), 308);
+  });
+
+  // Handle /sub-accounts with no trailing path
+  app.all("/sub-accounts", (c) => {
+    const url = new URL(c.req.url);
+    url.pathname = url.pathname.replace("/sub-accounts", "/containers");
+    return c.redirect(url.toString(), 308);
+  });
 
   return app;
 }

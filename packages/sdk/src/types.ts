@@ -6,20 +6,36 @@ export interface WithMemoryConfig {
 
 export interface Memory {
   id: string;
-  userId: string;
-  key: string | null;
+  forScope: string;
+  forKey: string | null;
   value: string;
   source: "explicit" | "extracted";
   createdAt: string;
   updatedAt: string;
 }
 
+export interface SetParams {
+  forScope: string;
+  forKey: string;
+  value: string;
+}
+
 export interface SetResponse {
   memory: Memory;
 }
 
+export interface GetParams {
+  forScope: string;
+  forKey: string;
+}
+
 export interface GetResponse {
   memory: Memory | null;
+}
+
+export interface RemoveParams {
+  forScope: string;
+  forKey: string;
 }
 
 export interface RecallResponse {
@@ -50,15 +66,15 @@ export interface HealthResponse {
 }
 
 export interface RecallOptions {
-  userId: string;
-  input: string;
+  forScope: string;
+  query: string;
   maxItems?: number;
   maxTokens?: number;
   defaults?: Record<string, string>;
 }
 
 export interface CommitOptions {
-  userId: string;
+  forScope: string;
   input: string;
   output: string;
 }
@@ -67,8 +83,8 @@ export interface RegisterDefaults {
   [key: string]: string;
 }
 
-export interface FetchMemoriesOptions {
-  userId?: string;
+export interface ListOptions {
+  forScope?: string;
   source?: "explicit" | "extracted" | "all";
   search?: string;
   createdAfter?: string;
@@ -80,15 +96,22 @@ export interface FetchMemoriesOptions {
   includeTotal?: boolean;
 }
 
-export interface FetchMemoriesResponse {
+export interface ListResponse {
   memories: Memory[];
   nextCursor: string | null;
   total?: number;
 }
 
-// ─── Sub-Accounts ─────────────────────────────────────────────────────────
+// ─── Backward compat aliases ─────────────────────────────────────────────
 
-export interface SubAccount {
+/** @deprecated Use ListOptions instead */
+export type FetchMemoriesOptions = ListOptions;
+/** @deprecated Use ListResponse instead */
+export type FetchMemoriesResponse = ListResponse;
+
+// ─── Containers (formerly Sub-Accounts) ──────────────────────────────────
+
+export interface Container {
   id: string;
   parentAccountId: string;
   name?: string;
@@ -100,7 +123,7 @@ export interface SubAccount {
   createdAt: string;
 }
 
-export interface SubAccountKey {
+export interface ContainerKey {
   id: string;
   accountId: string;
   keyPrefix: string;
@@ -110,40 +133,78 @@ export interface SubAccountKey {
   createdAt: string;
 }
 
-export interface CreateSubAccountOptions {
+export interface CreateContainerOptions {
   name: string;
   metadata?: Record<string, unknown>;
 }
 
-export interface CreateSubAccountKeyOptions {
+export interface CreateContainerKeyOptions {
+  forContainer: string;
   issuedTo: string;
   scopes?: string;
   expiresIn?: number;
 }
 
-export interface CreateSubAccountResponse {
-  account: SubAccount;
+export interface CreateContainerResponse {
+  account: Container;
 }
 
-export interface CreateSubAccountKeyResponse {
-  key: SubAccountKey;
+export interface CreateContainerKeyResponse {
+  key: ContainerKey;
   rawKey: string;
 }
 
-export interface ListSubAccountsResponse {
-  accounts: SubAccount[];
+export interface ListContainersResponse {
+  accounts: Container[];
   total: number;
 }
 
-export interface GetSubAccountResponse {
-  account: SubAccount;
+export interface GetContainerOptions {
+  forContainer: string;
 }
 
-export interface RevokeSubAccountKeyResponse {
+export interface GetContainerResponse {
+  account: Container;
+}
+
+export interface RevokeContainerKeyOptions {
+  forContainer: string;
+  forKey: string;
+}
+
+export interface RevokeContainerKeyResponse {
   revoked: boolean;
   revokedAt: string;
 }
 
-export interface DeleteSubAccountResponse {
+export interface DeleteContainerOptions {
+  forContainer: string;
+  confirm: true;
+}
+
+export interface DeleteContainerResponse {
   deleted: boolean;
 }
+
+// ─── Backward compat aliases (sub-accounts → containers) ─────────────────
+
+/** @deprecated Use Container instead */
+export type SubAccount = Container;
+/** @deprecated Use ContainerKey instead */
+export type SubAccountKey = ContainerKey;
+/** @deprecated Use CreateContainerOptions instead */
+export type CreateSubAccountOptions = CreateContainerOptions;
+/** @deprecated Use CreateContainerKeyOptions instead */
+export type CreateSubAccountKeyOptions = CreateContainerKeyOptions;
+/** @deprecated Use CreateContainerResponse instead */
+export type CreateSubAccountResponse = CreateContainerResponse;
+/** @deprecated Use CreateContainerKeyResponse instead */
+export type CreateSubAccountKeyResponse = CreateContainerKeyResponse;
+/** @deprecated Use ListContainersResponse instead */
+export type ListSubAccountsResponse = ListContainersResponse;
+/** @deprecated Use GetContainerResponse instead */
+export type GetSubAccountResponse = GetContainerResponse;
+/** @deprecated Use RevokeContainerKeyResponse instead */
+export type RevokeSubAccountKeyResponse = RevokeContainerKeyResponse;
+/** @deprecated Use DeleteContainerResponse instead */
+export type DeleteSubAccountResponse = DeleteContainerResponse;

@@ -3,8 +3,11 @@ export { WithMemoryError } from "./errors";
 export type {
   WithMemoryConfig,
   Memory,
+  SetParams,
   SetResponse,
+  GetParams,
   GetResponse,
+  RemoveParams,
   RecallResponse,
   RemoveResponse,
   HealthResponse,
@@ -13,6 +16,22 @@ export type {
   RegisterDefaults,
   ExtractionPromptResponse,
   ResetExtractionPromptResponse,
+  ListOptions,
+  ListResponse,
+  Container,
+  ContainerKey,
+  CreateContainerOptions,
+  CreateContainerResponse,
+  CreateContainerKeyOptions,
+  CreateContainerKeyResponse,
+  ListContainersResponse,
+  GetContainerOptions,
+  GetContainerResponse,
+  RevokeContainerKeyOptions,
+  RevokeContainerKeyResponse,
+  DeleteContainerOptions,
+  DeleteContainerResponse,
+  // Backward compat aliases
   FetchMemoriesOptions,
   FetchMemoriesResponse,
   SubAccount,
@@ -28,13 +47,22 @@ export type {
 } from "./types";
 
 import { WithMemoryClient } from "./client";
-import type { WithMemoryConfig, RegisterDefaults, RecallOptions, CommitOptions, FetchMemoriesOptions } from "./types";
+import type {
+  WithMemoryConfig,
+  RegisterDefaults,
+  RecallOptions,
+  CommitOptions,
+  SetParams,
+  GetParams,
+  RemoveParams,
+  ListOptions,
+} from "./types";
 
 // ─── Default singleton (UserDefaults pattern) ────────────────────────────────
 // Usage:
 //   import { memory } from '@withmemory/sdk';
 //   memory.configure({ apiKey: 'wm_...' });
-//   await memory.set('user-1', 'name', 'Alice');
+//   await memory.set({ value: 'Alice', forKey: 'name', forScope: 'user_1' });
 
 let instance: WithMemoryClient | null = null;
 
@@ -49,9 +77,6 @@ function getInstance(): WithMemoryClient {
 
 export const memory = {
   configure(config: WithMemoryConfig): void {
-    // NOTE: configure() replaces the instance wholesale. If future
-    // versions add in-flight state (commit queues, batching, etc.),
-    // revisit whether reconfiguration should drain or preserve it.
     instance = new WithMemoryClient(config);
   },
 
@@ -59,27 +84,32 @@ export const memory = {
     getInstance().register(defaults);
   },
 
-  set(userId: string, key: string, value: string) {
-    return getInstance().set(userId, key, value);
+  set(params: SetParams) {
+    return getInstance().set(params);
   },
 
-  get(userId: string, key: string) {
-    return getInstance().get(userId, key);
+  get(params: GetParams) {
+    return getInstance().get(params);
   },
 
   recall(options: RecallOptions) {
     return getInstance().recall(options);
   },
 
-  remove(userId: string, key: string) {
-    return getInstance().remove(userId, key);
+  remove(params: RemoveParams) {
+    return getInstance().remove(params);
   },
 
   commit(options: CommitOptions) {
     return getInstance().commit(options);
   },
 
-  fetchMemories(options?: FetchMemoriesOptions) {
+  list(options?: ListOptions) {
+    return getInstance().list(options);
+  },
+
+  /** @deprecated Use list() instead */
+  fetchMemories(options?: ListOptions) {
     return getInstance().fetchMemories(options);
   },
 
@@ -101,5 +131,14 @@ export const memory = {
 
   resetExtractionPrompt() {
     return getInstance().resetExtractionPrompt();
+  },
+
+  get containers() {
+    return getInstance().containers;
+  },
+
+  /** @deprecated Use containers instead */
+  get subAccounts() {
+    return getInstance().subAccounts;
   },
 };

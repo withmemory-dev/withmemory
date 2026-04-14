@@ -1,9 +1,13 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { zValidator } from "@hono/zod-validator";
 import { eq, and, isNull, or, ilike, gt, lt, sql, type SQL } from "drizzle-orm";
 import * as schema from "../../db/schema";
-import { USER_ID_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
+import {
+  SCOPE_MAX_LENGTH,
+  zodErrorHook,
+  normalizeParams,
+  setDeprecationHeader,
+} from "../../lib/validation";
 import { findEndUser } from "../../lib/end-users";
 import type { WorkerEnv, AppVariables } from "../../types";
 
@@ -15,7 +19,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // ─── List memories schema ────────────────────────────────────────────────────
 
 const listMemoriesSchema = z.object({
-  userId: z.string().min(1).max(USER_ID_MAX_LENGTH).optional(),
+  forScope: z.string().min(1).max(SCOPE_MAX_LENGTH).optional(),
   source: z.enum(["explicit", "extracted", "all"]).optional().default("all"),
   search: z.string().min(1).max(500).optional(),
   createdAfter: z.string().datetime().optional(),
@@ -30,7 +34,7 @@ const listMemoriesSchema = z.object({
   includeTotal: z.boolean().optional().default(false),
 });
 
-const listValidator = zValidator("json", listMemoriesSchema, zodErrorHook);
+// listValidator removed — manual parsing with normalization below
 
 // ─── Order column mapping ────────────────────────────────────────────────────
 
@@ -86,11 +90,29 @@ export function memoriesRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
   // POST /v1/memories/list — list memories with filtering, search, cursor pagination
-  app.post("/memories/list", listValidator, async (c) => {
+  app.post("/memories/list", async (c) => {
+    const rawBody = await c.req.json();
+    const { normalized, warnings } = normalizeParams(rawBody, ["userId"]);
+    setDeprecationHeader(c, warnings);
+
+    const parsed = listMemoriesSchema.safeParse(normalized);
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: {
+            code: "invalid_request",
+            message: "Invalid request body",
+            details: parsed.error.issues,
+          },
+        },
+        400
+      );
+    }
+
     const db = c.get("db");
     const account = c.get("account");
     const {
-      userId,
+      forScope,
       source,
       search,
       createdAfter,
@@ -100,12 +122,12 @@ export function memoriesRoute() {
       limit,
       cursor,
       includeTotal,
-    } = c.req.valid("json");
+    } = parsed.data;
 
-    // ── Resolve optional userId to end_user_id ───────────────────────────
+    // ── Resolve optional forScope to end_user_id ─────────────────────────
     let endUserId: string | undefined;
-    if (userId) {
-      const endUser = await findEndUser(db, account.id, userId);
+    if (forScope) {
+      const endUser = await findEndUser(db, account.id, forScope);
       if (!endUser) {
         return c.json({
           memories: [],
@@ -244,8 +266,8 @@ export function memoriesRoute() {
     // ── Map to Memory response shape (explicit column projection) ────────
     const memories = pageRows.map((r) => ({
       id: r.id,
-      userId: r.externalUserId,
-      key: r.key,
+      forScope: r.externalUserId,
+      forKey: r.key,
       value: r.content,
       source: r.source as "explicit" | "extracted",
       createdAt: r.createdAt.toISOString(),

@@ -19,6 +19,22 @@ We will generally not accept:
 - New dependencies without a clear justification
 - Stylistic refactors without functional changes
 
+## SDK parameter naming conventions
+
+These rules govern all current and future SDK method parameters.
+
+**Rule 1: Use `for*` prefix for relationship qualifiers.** A parameter gets the prefix if it answers "what is this operation *for*?" Current qualifiers:
+
+- `forKey` — the key under which an explicit memory is stored
+- `forScope` — the scope (namespace) the memory belongs to within a container
+- `forContainer` — the container a container-level operation targets
+
+**Rule 2: Plain nouns for content parameters.** Content parameters — the *thing* the operation is about — stay plain: `value`, `messages`, `query`, `name`, `scopes`.
+
+**Rule 3: When in doubt, ask "would this read naturally with the prefix?"** If `forX` reads naturally in English, use the prefix. If it reads awkwardly, use the plain noun.
+
+**Rule 4: Never use `for` as a parameter name by itself.** It's a JavaScript reserved word. Always use a `for*` compound.
+
 ## Development workflow (for the eventual public version)
 
 1. Fork the repository

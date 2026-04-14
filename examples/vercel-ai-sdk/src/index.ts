@@ -16,21 +16,21 @@ memory.configure({
   ...(BASE_URL ? { baseUrl: BASE_URL } : {}),
 });
 
-const userId = "demo-user";
+const forScope = "demo-user";
 const userMessage = "What stack should I use for my new project?";
 
 // ── Step 1: Store facts about the user ────────────────────────────────────────
 
 console.log("\n1. Setting memories...\n");
 
-const nameResult = await memory.set(userId, "name", "Andrew");
+const nameResult = await memory.set({ value: "Andrew", forKey: "name", forScope });
 console.log(`   set name → ${nameResult.memory.value}`);
 
-const stackResult = await memory.set(
-  userId,
-  "tech_stack",
-  "TypeScript, Next.js, Cloudflare Workers"
-);
+const stackResult = await memory.set({
+  value: "TypeScript, Next.js, Cloudflare Workers",
+  forKey: "tech_stack",
+  forScope,
+});
 console.log(`   set tech_stack → ${stackResult.memory.value}`);
 
 // ── Step 2: Recall memories with a user query ─────────────────────────────────
@@ -38,14 +38,14 @@ console.log(`   set tech_stack → ${stackResult.memory.value}`);
 console.log("\n2. Recalling memories...\n");
 
 const { context, memories } = await memory.recall({
-  userId,
-  input: userMessage,
+  forScope,
+  query: userMessage,
 });
 
 console.log(`   context:\n   "${context}"\n`);
 console.log(`   ${memories.length} memories returned:`);
 for (const m of memories) {
-  console.log(`     - ${m.key}: ${m.value}`);
+  console.log(`     - ${m.forKey}: ${m.value}`);
 }
 
 // ── Step 3: Use context in an LLM call via Vercel AI SDK ──────────────────────
@@ -71,8 +71,8 @@ if (!OPENAI_KEY) {
 
 console.log("4. Verifying stored memories with get()...\n");
 
-const nameCheck = await memory.get(userId, "name");
-const stackCheck = await memory.get(userId, "tech_stack");
+const nameCheck = await memory.get({ forScope, forKey: "name" });
+const stackCheck = await memory.get({ forScope, forKey: "tech_stack" });
 console.log(`   get name → ${nameCheck.memory?.value ?? "(not found)"}`);
 console.log(`   get tech_stack → ${stackCheck.memory?.value ?? "(not found)"}`);
 
@@ -83,10 +83,8 @@ console.log("\n5. Committing conversation for async extraction...\n");
 const reply =
   llmResponse ?? "I'd recommend sticking with your current stack since you already know it well.";
 
-// await is used here for legible execution order in the example. In production,
-// use `void memory.commit(...)` or `ctx.waitUntil(memory.commit(...))`.
 await memory.commit({
-  userId,
+  forScope,
   input: userMessage,
   output: reply,
 });

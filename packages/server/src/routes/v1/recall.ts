@@ -1,10 +1,13 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { zValidator } from "@hono/zod-validator";
 import { eq, and, sql } from "drizzle-orm";
 import { isNull } from "drizzle-orm/sql/expressions/conditions";
 import * as schema from "../../db/schema";
-import { USER_ID_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
+import {
+  SCOPE_MAX_LENGTH,
+  normalizeParams,
+  setDeprecationHeader,
+} from "../../lib/validation";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { embedQuery, EMBEDDING_DIMENSIONS } from "../../lib/embeddings";
 import {
@@ -20,14 +23,12 @@ const { wmEndUsers, wmMemories } = schema;
 // ─────────────────────────────────────────────────────────────────────────────
 
 const RecallRequestSchema = z.object({
-  userId: z.string().min(1).max(USER_ID_MAX_LENGTH),
-  input: z.string().min(1).max(8192),
+  forScope: z.string().min(1).max(SCOPE_MAX_LENGTH),
+  query: z.string().min(1).max(8192),
   maxItems: z.number().int().min(1).max(50).optional(),
   maxTokens: z.number().int().min(10).max(2000).optional(),
   defaults: z.record(z.string(), z.string()).optional(),
 });
-
-const validator = zValidator("json", RecallRequestSchema, zodErrorHook);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fallback ranking weights for the embedding-unavailable path.
@@ -150,11 +151,28 @@ function extractKeyMap(
 export function recallRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
-  app.post("/recall", validator, async (c) => {
+  app.post("/recall", async (c) => {
+    const rawBody = await c.req.json();
+    const { normalized, warnings } = normalizeParams(rawBody, ["userId", "input"]);
+    setDeprecationHeader(c, warnings);
+
+    const parsed = RecallRequestSchema.safeParse(normalized);
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: {
+            code: "invalid_request",
+            message: "Invalid request body",
+            details: parsed.error.issues,
+          },
+        },
+        400
+      );
+    }
+
     const db = c.get("db");
     const account = c.get("account");
-    const { userId, input, maxItems, maxTokens, defaults } =
-      c.req.valid("json");
+    const { forScope, query, maxItems, maxTokens, defaults } = parsed.data;
 
     const resolvedMaxItems = maxItems ?? 4;
     const resolvedMaxTokens = maxTokens ?? 150;
@@ -167,7 +185,7 @@ export function recallRoute() {
       .where(
         and(
           eq(wmEndUsers.accountId, account.id),
-          eq(wmEndUsers.externalId, userId)
+          eq(wmEndUsers.externalId, forScope)
         )
       )
       .limit(1);
@@ -211,7 +229,7 @@ export function recallRoute() {
       reason = "embedding_unavailable";
     } else {
       try {
-        queryEmbedding = await embedQuery(apiKey, input);
+        queryEmbedding = await embedQuery(apiKey, query);
       } catch (err) {
         console.warn(
           `recall: embedding failed, using fallback ranking (account=${account.id}): ${
@@ -353,8 +371,8 @@ export function recallRoute() {
       context,
       memories: keptRows.map((m) => ({
         id: m.id,
-        userId: userId,
-        key: keyMap.get(m.id) ?? null,
+        forScope,
+        forKey: keyMap.get(m.id) ?? null,
         value: m.content,
         source: m.source,
         createdAt: m.createdAt.toISOString(),
