@@ -23,7 +23,7 @@ export interface GetResponse {
 }
 
 export interface RecallResponse {
-  memoryBlock: string;
+  context: string;
   memories: Memory[];
   ranking: {
     strategy: "semantic" | "recency_importance" | "user_not_found";

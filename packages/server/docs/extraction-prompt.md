@@ -6,7 +6,7 @@ The extraction prompt is the system prompt sent to the LLM during `/v1/commit`. 
 
 ## Design philosophy
 
-**Conservative extraction is the product.** The target is ~70% empty extraction — most conversation turns should produce zero memories. A polluted memory store actively degrades agent quality. Every false positive is a line that will appear in a user's `memoryBlock` forever, displacing something useful.
+**Conservative extraction is the product.** The target is ~70% empty extraction — most conversation turns should produce zero memories. A polluted memory store actively degrades agent quality. Every false positive is a line that will appear in a user's `context` forever, displacing something useful.
 
 ### What counts as extractable
 

@@ -98,7 +98,7 @@ tests.push({
   fn: async () => {
     const res = await apiCall("/v1/recall", { userId, input: "hello" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
-    assert(res.body.memoryBlock === "", `expected empty memoryBlock, got "${res.body.memoryBlock}"`);
+    assert(res.body.context === "", `expected empty context, got "${res.body.context}"`);
     assert(res.body.memories.length === 0, `expected 0 memories, got ${res.body.memories.length}`);
   },
 });
@@ -142,15 +142,15 @@ tests.push({
     const res = await apiCall("/v1/recall", { userId, input: "tell me about myself" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memories.length === 3, `expected 3 memories, got ${res.body.memories.length}`);
-    assert(res.body.memoryBlock.length > 0, "expected non-empty memoryBlock");
-    assert(res.body.memoryBlock.includes("name: Andrew"), `memoryBlock missing "name: Andrew"`);
+    assert(res.body.context.length > 0, "expected non-empty context");
+    assert(res.body.context.includes("name: Andrew"), `context missing "name: Andrew"`);
     assert(
-      res.body.memoryBlock.includes("role: engineer"),
-      `memoryBlock missing "role: engineer"`
+      res.body.context.includes("role: engineer"),
+      `context missing "role: engineer"`
     );
     assert(
-      res.body.memoryBlock.includes("subscription: pro"),
-      `memoryBlock missing "subscription: pro"`
+      res.body.context.includes("subscription: pro"),
+      `context missing "subscription: pro"`
     );
     // Verify all three keys are present (order depends on semantic ranking)
     const keys = new Set(res.body.memories.map((m: any) => m.key));
@@ -632,7 +632,7 @@ tests.push({
 // ── /v1/recall defaults tests ────────────────────────────────────────────────
 
 tests.push({
-  name: "Recall with defaults for nonexistent user returns defaults in memoryBlock",
+  name: "Recall with defaults for nonexistent user returns defaults in context",
   fn: async () => {
     const res = await apiCall("/v1/recall", {
       userId: "recall_defaults_test_user",
@@ -640,8 +640,8 @@ tests.push({
       defaults: { plan: "pro", tier: "beta" },
     });
     assert(res.status === 200, `expected 200, got ${res.status}`);
-    assert(res.body.memoryBlock.includes("plan: pro"), `expected "plan: pro" in memoryBlock`);
-    assert(res.body.memoryBlock.includes("tier: beta"), `expected "tier: beta" in memoryBlock`);
+    assert(res.body.context.includes("plan: pro"), `expected "plan: pro" in context`);
+    assert(res.body.context.includes("tier: beta"), `expected "tier: beta" in context`);
     assert(res.body.memories.length === 0, `expected 0 memories (defaults are not real memories)`);
   },
 });
@@ -649,7 +649,7 @@ tests.push({
 // ── SDK register() + recall() defaults test ─────────────────────────────────
 
 tests.push({
-  name: "SDK register() defaults appear in recall() memoryBlock",
+  name: "SDK register() defaults appear in recall() context",
   fn: async () => {
     const client = createClient({ apiKey: API_KEY!, baseUrl: BASE_URL });
     client.register({ theme: "dark", language: "en" });
@@ -657,10 +657,10 @@ tests.push({
       userId: "sdk_register_test_nonexistent_user",
       input: "hello",
     });
-    assert(result.memoryBlock.includes("theme: dark"), `expected "theme: dark" in memoryBlock`);
+    assert(result.context.includes("theme: dark"), `expected "theme: dark" in context`);
     assert(
-      result.memoryBlock.includes("language: en"),
-      `expected "language: en" in memoryBlock`
+      result.context.includes("language: en"),
+      `expected "language: en" in context`
     );
     assert(result.memories.length === 0, `expected 0 memories for nonexistent user`);
   },

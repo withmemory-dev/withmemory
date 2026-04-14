@@ -6,7 +6,7 @@ Demonstrates the `@withmemory/sdk` integration pattern with the Vercel AI SDK in
 
 - Configuring the SDK singleton with `memory.configure()`
 - Storing explicit facts with `memory.set()` and retrieving them with `memory.get()`
-- Retrieving a `memoryBlock` with `memory.recall()`
+- Retrieving a `context` string with `memory.recall()`
 - Prepending memory context to an LLM system message via the Vercel AI SDK
 - Fire-and-forget conversation commit with `memory.commit()`
 
@@ -39,7 +39,7 @@ pnpm --filter @withmemory/example-vercel-ai-sdk start
 
 2. Recalling memories...
 
-   memoryBlock:
+   context:
    "tech_stack: TypeScript, Next.js, Cloudflare Workers
    name: Andrew"
 
