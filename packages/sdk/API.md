@@ -38,6 +38,20 @@ Initial public API.
 
 All `/v1/*` routes are POST with JSON bodies, except DELETE on resources addressed by primary key (e.g., `DELETE /v1/memories/:id`) and GET for read-only status endpoints (e.g., `GET /v1/health`). The `scope` field is a filter within the account's data, not an addressable resource — it lives in the request body, never in the URL path or query string.
 
+All request bodies are validated with strict Zod schemas. Unrecognized keys are rejected with a 400 `invalid_request` error.
+
+## Authentication models
+
+The API uses three authentication models depending on the endpoint:
+
+| Model | Header | Endpoints |
+|-------|--------|-----------|
+| **API key auth** | `Authorization: Bearer wm_live_...` | All `/v1/memories/*`, `/v1/recall`, `/v1/account/*`, `/v1/containers/*`, `/v1/cache/claim` |
+| **Cache token auth** | `Authorization: Bearer wm_tmp_...` | `/v1/cache/set`, `/v1/cache/get`, `/v1/cache/delete`, `/v1/cache/list` |
+| **Unauthenticated** | None | `/v1/cache` (create), `/v1/cache/preview`, `/v1/auth/*`, `/health`, `/health/db` |
+
+Cache tokens are returned by `POST /v1/cache` and are short-lived (24h max). They are separate from API keys and cannot access memory endpoints.
+
 ## Error handling
 
 ### WithMemoryError
@@ -88,6 +102,10 @@ try {
 | `ContainerNameExistsError` | `container_name_exists` |
 | `ConfirmationRequiredError` | `confirmation_required` |
 | `ExtractionFailedError` | `extraction_failed` |
+| `RateLimitedError` | `rate_limited` |
+| `CacheEntryLimitError` | `cache_entry_limit` |
+| `CacheExpiredError` | `cache_expired` |
+| `AlreadyClaimedError` | `already_claimed` |
 | `TimeoutError` | `timeout` |
 | `NetworkError` | `network_error` |
 
@@ -95,7 +113,7 @@ try {
 
 | Code | Origin | HTTP Status | When |
 |------|--------|-------------|------|
-| `unauthorized` | Server | 401 | Missing, malformed, or invalid API key |
+| `unauthorized` | Server | 401 | Missing, malformed, or invalid API key / cache token |
 | `key_expired` | Server | 401 | API key has passed its `expires_at` timestamp |
 | `invalid_request` | Server | 400 | Request body fails Zod validation |
 | `not_found` | Server | 404 | Route does not exist or resource not found |
@@ -105,6 +123,11 @@ try {
 | `container_name_exists` | Server | 409 | A container with this name already exists under the parent account |
 | `confirmation_required` | Server | 400 | Destructive action requires `{ confirm: true }` in body |
 | `extraction_failed` | Server | 500 | LLM extraction pipeline failed (extraction path only) |
+| `rate_limited` | Server | 429 | Cache creation (3/IP/24h) or auth code request (3/email/hour) rate limit |
+| `cache_entry_limit` | Server | 403 | Cache entry cap reached (50 entries per cache) |
+| `cache_expired` | Server | 410 | Attempted to claim an expired cache |
+| `already_claimed` | Server | 409 | Cache has already been claimed by another account |
+| `invalid_code` | Server | 401 | Email verification code is wrong or expired |
 | `timeout` | SDK | 0 | Request exceeded the configured timeout |
 | `network_error` | SDK | 0 | Fetch failed (DNS, connection refused, TLS, offline, etc.) |
 
@@ -132,6 +155,8 @@ try {
 }
 ```
 
+`container_limit_exceeded` follows the same pattern with `delete_containers` and `upgrade_plan` recovery options.
+
 `quota_scope` is `"parent_account"` for top-level accounts or `"container"` for sub-accounts. Read endpoints (`list`, `get`, `recall`) are never blocked by quota — only writes (`add`) are gated, so the "list + remove" recovery path always works.
 
 ### Auto-retry
@@ -157,7 +182,7 @@ await memory.add({ scope: 'alice', value: '...' }, { maxRetries: 0 });
 
 Default: 3 retries. Set `maxRetries: 0` to disable retries for a specific call.
 
-**Idempotency note:** when using auto-retry on the extraction path (add without `key`), pass an `Idempotency-Key` header via request options to avoid duplicate extraction writes on retry.
+**Extraction retry cost:** The extraction path (`add` without `key`) makes an LLM call per attempt. Consider `{ maxRetries: 0 }` or `{ maxRetries: 1 }` for cost-sensitive extraction calls.
 
 ### Timeouts
 
@@ -169,6 +194,17 @@ await memory.add({ scope: 'alice', value: '...' }, { timeout: 10000 });
 ```
 
 Each retry attempt gets its own fresh timeout. A timeout on one attempt does not consume all retries.
+
+### Idempotency
+
+| Method | Idempotent? | Notes |
+|--------|-------------|-------|
+| `add({ scope, key, value })` | Yes | Upsert by (scope, key) — same key overwrites |
+| `add({ scope, value })` | No | Each call re-runs LLM extraction. Use `Idempotency-Key` header for safe retries |
+| `remove({ scope, key })` | Yes | Deleting a nonexistent key returns `{ deleted: false }` |
+| `delete(memoryId)` | Yes | Deleting a nonexistent ID returns `{ deleted: false }` |
+| `containers.create({ name })` | Idempotent-feeling | Duplicate name returns 409 with `details.existing_container_id` |
+| `cache.set({ key, value })` | Yes | Upsert by (cache, key) |
 
 ### Health endpoints
 
@@ -354,6 +390,8 @@ interface ResetExtractionPromptResponse {
 | `setExtractionPrompt(prompt)` | `POST /v1/account/extraction-prompt` | `ExtractionPromptResponse` | Yes |
 | `getExtractionPrompt()` | `GET /v1/account/extraction-prompt` | `ExtractionPromptResponse` | Yes |
 | `resetExtractionPrompt()` | `DELETE /v1/account/extraction-prompt` | `ResetExtractionPromptResponse` | Yes |
+| `cache.create(options?)` | `POST /v1/cache` | `CacheInstance` | Yes |
+| `cache.claim({ claimToken })` | `POST /v1/cache/claim` | `CacheClaimResponse` | Yes |
 
 ### memory.add
 
@@ -381,6 +419,106 @@ The extraction path respects the account's custom extraction prompt if one is se
 
 **`list(options?)`** lists non-superseded memories with optional filtering, search, sort, and cursor-based pagination. Supports account-wide listing (omit `scope`) or per-scope listing (provide `scope`). Cursors are opaque strings using keyset pagination internally.
 
+## Cache
+
+The cache is an ephemeral key-value store for zero-auth bootstrap demos. No API key required to create or use a cache. Caches expire after a configurable TTL (default 24 hours, max 24 hours). Rate limited to 3 caches per IP per 24 hours.
+
+### SDK usage
+
+```ts
+const cache = await memory.cache.create();
+
+await cache.set({ key: "user:name", value: "Alice" });
+const { entry } = await cache.get({ key: "user:name" });
+const { entries } = await cache.list();
+await cache.delete({ key: "user:name" });
+
+// Share cache.claimUrl to promote entries into permanent memory
+```
+
+`cache.create()` works **without calling `configure()` first** — it is the one method that does not require an API key. The returned `CacheInstance` has bound `set`, `get`, `delete`, and `list` methods authenticated with the cache's own token.
+
+### Cache claim
+
+Claiming promotes all cache entries into permanent memories under a new container in the claimant's account. Requires API key auth.
+
+```ts
+const result = await memory.cache.claim({ claimToken: cache.claimToken });
+// result: { claimed: true, containerId: "...", memoriesCreated: 5 }
+```
+
+### Cache HTTP endpoints
+
+| Endpoint | Auth | Method | Description |
+|----------|------|--------|-------------|
+| `POST /v1/cache` | None | Create cache | Returns `rawToken`, `claimToken`, `claimUrl`, `expiresAt` |
+| `POST /v1/cache/set` | Cache token | Set entry | Upsert by key. 50 entries max, 10KB per value |
+| `POST /v1/cache/get` | Cache token | Get entry | Returns entry or null |
+| `POST /v1/cache/delete` | Cache token | Delete entry | Returns `{ deleted: boolean }` |
+| `GET /v1/cache/list` | Cache token | List entries | Returns keys + timestamps (no values) |
+| `POST /v1/cache/claim` | API key | Claim cache | Promotes entries to permanent memories |
+| `POST /v1/cache/preview` | None | Preview cache | Returns entry keys (no values) for claim page UI |
+
+### Cache types
+
+```ts
+interface CacheCreateOptions { ttlSeconds?: number; }  // 60-86400, default 86400
+
+interface CacheEntry {
+  key: string;
+  value: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CacheSetResponse { entry: CacheEntry; request_id?: string; }
+interface CacheGetResponse { entry: CacheEntry | null; request_id?: string; }
+interface CacheDeleteResponse { result: { deleted: boolean }; request_id?: string; }
+
+interface CacheListEntry { key: string; createdAt: string; updatedAt: string; }
+interface CacheListResponse { entries: CacheListEntry[]; request_id?: string; }
+
+interface CacheClaimResponse {
+  result: { claimed: boolean; containerId: string; memoriesCreated: number };
+  request_id?: string;
+}
+```
+
+## Email-code signup
+
+Agents can get API keys without a browser via email verification. Both endpoints are unauthenticated.
+
+### POST /v1/auth/request-code
+
+Sends a 6-digit verification code to the given email. Rate limited to 3 requests per email per hour. Codes expire in 10 minutes.
+
+```json
+// Request
+{ "email": "user@example.com" }
+
+// Response (200 — always, regardless of whether the email exists)
+{ "result": { "sent": true }, "request_id": "..." }
+```
+
+### POST /v1/auth/verify-code
+
+Verifies a code and returns a fresh API key. Creates a new account if the email is not registered. Locks after 5 failed attempts (30-minute lockout).
+
+```json
+// Request
+{ "email": "user@example.com", "code": "847293" }
+
+// Response (200)
+{
+  "result": {
+    "apiKey": "wm_live_...",
+    "accountId": "...",
+    "isNewAccount": true
+  },
+  "request_id": "..."
+}
+```
+
 ## Containers
 
 Containers allow Pro-and-up accounts to provision isolated namespaces for autonomous agents. Each container has its own memories, keys, and end users, but quota is inherited from the parent account.
@@ -407,8 +545,6 @@ All methods are namespaced under `containers`:
 | `containers.get({ containerId })` | `GET /v1/containers/:id` | `Container` | Yes |
 | `containers.revokeKey({ containerId, keyId })` | `DELETE /v1/containers/:id/keys/:keyId` | `RevokeContainerKeyResponse` | Yes |
 | `containers.delete({ containerId, confirm: true })` | `DELETE /v1/containers/:id` | `DeleteContainerResponse` | Yes |
-
-**SDK vs HTTP divergence:** `containers.create()`, `containers.list()`, and `containers.get()` return unwrapped `Container` / `Container[]` directly. The HTTP response includes an envelope (`{ container: {...} }` / `{ containers: [...] }`), but the SDK unwraps it for ergonomics.
 
 **Container name uniqueness:** Creating a container with a name that already exists under the same parent account returns 409 with error code `container_name_exists`. The `details.existing_container_id` field contains the ID of the existing container, enabling idempotent-feeling provisioning — an agent retrying after a timeout can use the existing container instead of creating a duplicate.
 
@@ -444,7 +580,7 @@ interface ContainerKey {
 
 | Scope | Grants |
 |-------|--------|
-| `memory:read` | `get`, `recall`, `list`, `health` |
+| `memory:read` | `get`, `recall`, `list`, `health`, `whoami`, `usage` |
 | `memory:write` | `add`, `remove`, `delete` |
 | `account:admin` | Container management endpoints, extraction prompt CRUD |
 
@@ -459,3 +595,15 @@ Keys are soft-revoked by setting `revoked_at` instead of deleting the row. Revok
 ### Quota inheritance
 
 Container memories count against the parent account's `memory_limit`. The quota check sums active (non-superseded) memories across the parent and all its containers. When the combined limit is reached, writes on both the parent and containers return 403 `quota_exceeded`.
+
+## SDK vs HTTP API divergence
+
+The SDK provides ergonomic wrappers that differ from the raw HTTP responses:
+
+| Feature | SDK behavior | HTTP behavior |
+|---------|-------------|---------------|
+| Container create/list/get | Returns unwrapped `Container` / `Container[]` | Returns `{ container: {...} }` / `{ containers: [...] }` envelope |
+| Container key scopes | Accepts `string \| string[]` | Expects comma-separated `string` |
+| Cache create | Returns `CacheInstance` with bound methods | Returns `{ cache: { rawToken, claimToken, ... } }` |
+| Errors | Typed subclasses with `instanceof` | JSON `{ error: { code, message, details } }` |
+| Auth header | Automatic from config | Manual `Authorization: Bearer ...` |
