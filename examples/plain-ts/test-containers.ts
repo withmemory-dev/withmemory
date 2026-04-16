@@ -129,15 +129,15 @@ tests.push({
       metadata: { purpose: "testing", version: 1 },
     });
     assert(res.status === 201, `expected 201, got ${res.status}`);
-    assert(res.body.account.parentAccountId === accountIdA, "parentAccountId mismatch");
-    assert(res.body.account.name === "agent-alpha", "name mismatch");
-    assert(res.body.account.metadata.purpose === "testing", "metadata mismatch");
-    assert(res.body.account.planTier === "pro", "planTier should inherit");
+    assert(res.body.container.parentAccountId === accountIdA, "parentAccountId mismatch");
+    assert(res.body.container.name === "agent-alpha", "name mismatch");
+    assert(res.body.container.metadata.purpose === "testing", "metadata mismatch");
+    assert(res.body.container.planTier === "pro", "planTier should inherit");
     assert(
       typeof res.body.request_id === "string" && res.body.request_id.length > 0,
       `expected request_id in response body`
     );
-    containerId = res.body.account.id;
+    containerId = res.body.container.id;
   },
 });
 
@@ -220,8 +220,8 @@ tests.push({
       "POST",
       "/v1/memories",
       {
-        forScope: "agent-user-1",
-        forKey: "preference",
+        scope: "agent-user-1",
+        key: "preference",
         value: "dark-mode",
       },
       { key: containerRawKey }
@@ -285,8 +285,8 @@ tests.push({
       "POST",
       "/v1/memories",
       {
-        forScope: "agent-user-1",
-        forKey: "k2",
+        scope: "agent-user-1",
+        key: "k2",
         value: "v2",
       },
       { key: containerRawKey }
@@ -298,8 +298,8 @@ tests.push({
       "POST",
       "/v1/memories",
       {
-        forScope: "agent-user-1",
-        forKey: "k3",
+        scope: "agent-user-1",
+        key: "k3",
         value: "v3",
       },
       { key: containerRawKey }
@@ -325,11 +325,11 @@ tests.push({
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.total === 10, `expected total=10, got ${res.body.total}`);
     assert(
-      res.body.accounts.length === 10,
-      `expected 10 accounts, got ${res.body.accounts.length}`
+      res.body.containers.length === 10,
+      `expected 10 containers, got ${res.body.containers.length}`
     );
     // The first container should have 2 memories from the quota test
-    const first = res.body.accounts.find((a: any) => a.id === containerId);
+    const first = res.body.containers.find((a: any) => a.id === containerId);
     assert(first !== undefined, "container not found in list");
     assert(first.memoryCount === 2, `expected memoryCount=2, got ${first.memoryCount}`);
     assert(first.name === "agent-alpha", `expected name=agent-alpha, got ${first.name}`);
@@ -344,17 +344,20 @@ tests.push({
   fn: async () => {
     const res = await apiCall("GET", `/v1/containers/${containerId}`, undefined);
     assert(res.status === 200, `expected 200, got ${res.status}`);
-    assert(res.body.account.id === containerId, "id mismatch");
+    assert(res.body.container.id === containerId, "id mismatch");
     assert(
-      res.body.account.memoryCount === 2,
-      `expected memoryCount=2, got ${res.body.account.memoryCount}`
+      res.body.container.memoryCount === 2,
+      `expected memoryCount=2, got ${res.body.container.memoryCount}`
     );
     assert(
-      res.body.account.activeKeyCount === 1,
-      `expected activeKeyCount=1, got ${res.body.account.activeKeyCount}`
+      res.body.container.activeKeyCount === 1,
+      `expected activeKeyCount=1, got ${res.body.container.activeKeyCount}`
     );
-    assert(res.body.account.name === "agent-alpha", `expected name, got ${res.body.account.name}`);
-    assert(res.body.account.metadata.purpose === "testing", "metadata missing");
+    assert(
+      res.body.container.name === "agent-alpha",
+      `expected name, got ${res.body.container.name}`
+    );
+    assert(res.body.container.metadata.purpose === "testing", "metadata missing");
   },
 });
 
@@ -421,8 +424,14 @@ tests.push({
       undefined
     );
     assert(revokeRes.status === 200, `expected 200, got ${revokeRes.status}`);
-    assert(revokeRes.body.revoked === true, "expected revoked=true");
-    assert(revokeRes.body.revokedAt !== undefined, "expected revokedAt");
+    assert(
+      revokeRes.body.result?.revoked === true,
+      `expected result.revoked=true, got ${JSON.stringify(revokeRes.body.result)}`
+    );
+    assert(
+      typeof revokeRes.body.result?.revokedAt === "string",
+      `expected result.revokedAt string, got ${typeof revokeRes.body.result?.revokedAt}`
+    );
 
     // Subsequent call with revoked key should fail
     const res = await apiCall("GET", "/v1/health", undefined, { key: containerRawKey });
@@ -457,7 +466,10 @@ tests.push({
   fn: async () => {
     const res = await apiCall("DELETE", `/v1/containers/${containerId}`, { confirm: true });
     assert(res.status === 200, `expected 200, got ${res.status}`);
-    assert(res.body.deleted === true, "expected deleted=true");
+    assert(
+      res.body.result?.deleted === true,
+      `expected result.deleted=true, got ${JSON.stringify(res.body.result)}`
+    );
 
     // Container should be gone
     const getRes = await apiCall("GET", `/v1/containers/${containerId}`, undefined);
@@ -480,7 +492,7 @@ tests.push({
     // Create a fresh container for this test
     const createRes = await apiCall("POST", "/v1/containers", { name: "expiry-test" });
     assert(createRes.status === 201, `create: expected 201, got ${createRes.status}`);
-    const expirySubId = createRes.body.account.id;
+    const expirySubId = createRes.body.container.id;
 
     // Mint a key with 2-second TTL
     const keyRes = await apiCall("POST", `/v1/containers/${expirySubId}/keys`, {

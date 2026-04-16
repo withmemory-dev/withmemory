@@ -54,7 +54,7 @@ async function updateTestAccount(patch: {
   }
 }
 
-const forScope = `e2e_test_${Date.now()}`;
+const scope = `e2e_test_${Date.now()}`;
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -97,7 +97,7 @@ let firstMemoryId: string;
 tests.push({
   name: "Recall on nonexistent user returns empty",
   fn: async () => {
-    const res = await apiCall("/v1/recall", { forScope, query: "hello" });
+    const res = await apiCall("/v1/recall", { scope, query: "hello" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.context === "", `expected empty context, got "${res.body.context}"`);
     assert(res.body.memories.length === 0, `expected 0 memories, got ${res.body.memories.length}`);
@@ -107,7 +107,7 @@ tests.push({
 tests.push({
   name: "Add first memory: name (explicit)",
   fn: async () => {
-    const res = await apiCall("/v1/memories", { forScope, forKey: "name", value: "Andrew" });
+    const res = await apiCall("/v1/memories", { scope, key: "name", value: "Andrew" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memories.length === 1, `expected 1 memory, got ${res.body.memories.length}`);
     assert(
@@ -116,9 +116,9 @@ tests.push({
     );
     const mem = res.body.memories[0];
     assert(mem.source === "explicit", `expected source "explicit"`);
-    assert(mem.forKey === "name", `expected key "name"`);
+    assert(mem.key === "name", `expected key "name"`);
     assert(mem.value === "Andrew", `expected value "Andrew"`);
-    assert(mem.forScope === forScope, `expected forScope "${forScope}"`);
+    assert(mem.scope === scope, `expected scope "${scope}"`);
     firstMemoryId = mem.id;
   },
 });
@@ -126,10 +126,10 @@ tests.push({
 tests.push({
   name: "Add second memory: role (explicit)",
   fn: async () => {
-    const res = await apiCall("/v1/memories", { forScope, forKey: "role", value: "engineer" });
+    const res = await apiCall("/v1/memories", { scope, key: "role", value: "engineer" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memories.length === 1, `expected 1 memory`);
-    assert(res.body.memories[0].forKey === "role", `expected key "role"`);
+    assert(res.body.memories[0].key === "role", `expected key "role"`);
     assert(res.body.memories[0].value === "engineer", `expected value "engineer"`);
   },
 });
@@ -138,13 +138,13 @@ tests.push({
   name: "Add third memory: subscription (explicit)",
   fn: async () => {
     const res = await apiCall("/v1/memories", {
-      forScope,
-      forKey: "subscription",
+      scope,
+      key: "subscription",
       value: "pro",
     });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memories.length === 1, `expected 1 memory`);
-    assert(res.body.memories[0].forKey === "subscription", `expected key "subscription"`);
+    assert(res.body.memories[0].key === "subscription", `expected key "subscription"`);
     assert(res.body.memories[0].value === "pro", `expected value "pro"`);
   },
 });
@@ -152,7 +152,7 @@ tests.push({
 tests.push({
   name: "Recall returns all three memories",
   fn: async () => {
-    const res = await apiCall("/v1/recall", { forScope, query: "tell me about myself" });
+    const res = await apiCall("/v1/recall", { scope, query: "tell me about myself" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memories.length === 3, `expected 3 memories, got ${res.body.memories.length}`);
     assert(res.body.context.length > 0, "expected non-empty context");
@@ -163,17 +163,17 @@ tests.push({
     assert(res.body.context.includes("name: Andrew"), `context missing "name: Andrew"`);
     assert(res.body.context.includes("role: engineer"), `context missing "role: engineer"`);
     assert(res.body.context.includes("subscription: pro"), `context missing "subscription: pro"`);
-    const keys = new Set(res.body.memories.map((m: any) => m.forKey));
-    assert(keys.has("subscription"), `missing forKey "subscription"`);
-    assert(keys.has("role"), `missing forKey "role"`);
-    assert(keys.has("name"), `missing forKey "name"`);
+    const keys = new Set(res.body.memories.map((m: any) => m.key));
+    assert(keys.has("subscription"), `missing key "subscription"`);
+    assert(keys.has("role"), `missing key "role"`);
+    assert(keys.has("name"), `missing key "name"`);
   },
 });
 
 tests.push({
   name: "Recall with maxItems=2 returns 2 memories",
   fn: async () => {
-    const res = await apiCall("/v1/recall", { forScope, query: "hi", maxItems: 2 });
+    const res = await apiCall("/v1/recall", { scope, query: "hi", maxItems: 2 });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memories.length === 2, `expected 2 memories, got ${res.body.memories.length}`);
   },
@@ -183,8 +183,8 @@ tests.push({
   name: "Upsert updates existing memory",
   fn: async () => {
     const res = await apiCall("/v1/memories", {
-      forScope,
-      forKey: "name",
+      scope,
+      key: "name",
       value: "Andrew Gierke",
     });
     assert(res.status === 200, `expected 200, got ${res.status}`);
@@ -199,9 +199,9 @@ tests.push({
 tests.push({
   name: "Recall after upsert reflects the change",
   fn: async () => {
-    const res = await apiCall("/v1/recall", { forScope, query: "who am i" });
+    const res = await apiCall("/v1/recall", { scope, query: "who am i" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
-    const nameMem = res.body.memories.find((m: any) => m.forKey === "name");
+    const nameMem = res.body.memories.find((m: any) => m.key === "name");
     assert(nameMem !== undefined, "expected to find name memory in recall");
     assert(
       nameMem.value === "Andrew Gierke",
@@ -215,7 +215,7 @@ tests.push({
   fn: async () => {
     const res = await apiCall(
       "/v1/memories",
-      { forScope, forKey: "x", value: "y" },
+      { scope, key: "x", value: "y" },
       { key: "wm_test_definitely_not_valid" }
     );
     assert(res.status === 401, `expected 401, got ${res.status}`);
@@ -229,7 +229,7 @@ tests.push({
 tests.push({
   name: "Validation failure returns 400",
   fn: async () => {
-    const res = await apiCall("/v1/memories", { forScope: "x" });
+    const res = await apiCall("/v1/memories", { scope: "x" });
     assert(res.status === 400, `expected 400, got ${res.status}`);
     assert(
       res.body.error?.code === "invalid_request",
@@ -243,12 +243,12 @@ tests.push({
 tests.push({
   name: "Get existing memory by key",
   fn: async () => {
-    const res = await apiCall("/v1/memories/get", { forScope, forKey: "name" });
+    const res = await apiCall("/v1/memories/get", { scope, key: "name" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memory !== null, "expected memory to be non-null");
     assert(
-      res.body.memory.forKey === "name",
-      `expected forKey "name", got "${res.body.memory.forKey}"`
+      res.body.memory.key === "name",
+      `expected key "name", got "${res.body.memory.key}"`
     );
     assert(
       res.body.memory.value === "Andrew Gierke",
@@ -260,7 +260,7 @@ tests.push({
 tests.push({
   name: "Get nonexistent key returns null memory",
   fn: async () => {
-    const res = await apiCall("/v1/memories/get", { forScope, forKey: "nonexistent_key" });
+    const res = await apiCall("/v1/memories/get", { scope, key: "nonexistent_key" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(
       res.body.memory === null,
@@ -273,8 +273,8 @@ tests.push({
   name: "Get for nonexistent user returns null memory",
   fn: async () => {
     const res = await apiCall("/v1/memories/get", {
-      forScope: "no_such_user_ever",
-      forKey: "name",
+      scope: "no_such_user_ever",
+      key: "name",
     });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memory === null, `expected null memory`);
@@ -284,23 +284,29 @@ tests.push({
 // ── /v1/memories/remove tests ───────────────────────────────────────────────
 
 tests.push({
-  name: "Remove existing memory returns deleted: true",
+  name: "Remove existing memory returns result.deleted: true",
   fn: async () => {
-    await apiCall("/v1/memories", { forScope, forKey: "to_delete", value: "temporary" });
-    const res = await apiCall("/v1/memories/remove", { forScope, forKey: "to_delete" });
+    await apiCall("/v1/memories", { scope, key: "to_delete", value: "temporary" });
+    const res = await apiCall("/v1/memories/remove", { scope, key: "to_delete" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
-    assert(res.body.deleted === true, `expected deleted: true, got ${res.body.deleted}`);
-    const check = await apiCall("/v1/memories/get", { forScope, forKey: "to_delete" });
+    assert(
+      res.body.result?.deleted === true,
+      `expected result.deleted: true, got ${JSON.stringify(res.body.result)}`
+    );
+    const check = await apiCall("/v1/memories/get", { scope, key: "to_delete" });
     assert(check.body.memory === null, "expected memory to be gone after remove");
   },
 });
 
 tests.push({
-  name: "Remove nonexistent key returns deleted: false",
+  name: "Remove nonexistent key returns result.deleted: false",
   fn: async () => {
-    const res = await apiCall("/v1/memories/remove", { forScope, forKey: "never_existed" });
+    const res = await apiCall("/v1/memories/remove", { scope, key: "never_existed" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
-    assert(res.body.deleted === false, `expected deleted: false, got ${res.body.deleted}`);
+    assert(
+      res.body.result?.deleted === false,
+      `expected result.deleted: false, got ${JSON.stringify(res.body.result)}`
+    );
   },
 });
 
@@ -315,8 +321,14 @@ tests.push({
     });
     assert(response.status === 200, `expected 200, got ${response.status}`);
     const body = (await response.json()) as any;
-    assert(body.status === "ok", `expected status "ok", got "${body.status}"`);
-    assert(typeof body.version === "string", `expected version string, got ${typeof body.version}`);
+    assert(
+      body.health?.status === "ok",
+      `expected health.status "ok", got "${body.health?.status}"`
+    );
+    assert(
+      typeof body.health?.version === "string",
+      `expected health.version string, got ${typeof body.health?.version}`
+    );
   },
 });
 
@@ -325,7 +337,7 @@ tests.push({
 tests.push({
   name: "Unknown /v1 route returns 404 with error envelope",
   fn: async () => {
-    const res = await apiCall("/v1/nonexistent", { forScope });
+    const res = await apiCall("/v1/nonexistent", { scope });
     assert(res.status === 404, `expected 404, got ${res.status}`);
     assert(
       res.body.error?.code === "not_found",
@@ -339,7 +351,7 @@ tests.push({
 tests.push({
   name: "Old POST /v1/set returns 404",
   fn: async () => {
-    const res = await apiCall("/v1/set", { forScope, forKey: "test", value: "should 404" });
+    const res = await apiCall("/v1/set", { scope, key: "test", value: "should 404" });
     assert(res.status === 404, `expected 404, got ${res.status}`);
     assert(res.body.error?.code === "not_found", `expected not_found`);
   },
@@ -348,7 +360,7 @@ tests.push({
 tests.push({
   name: "Old POST /v1/get returns 404",
   fn: async () => {
-    const res = await apiCall("/v1/get", { forScope, forKey: "test" });
+    const res = await apiCall("/v1/get", { scope, key: "test" });
     assert(res.status === 404, `expected 404, got ${res.status}`);
     assert(res.body.error?.code === "not_found", `expected not_found`);
   },
@@ -357,7 +369,7 @@ tests.push({
 tests.push({
   name: "Old POST /v1/remove returns 404",
   fn: async () => {
-    const res = await apiCall("/v1/remove", { forScope, forKey: "test" });
+    const res = await apiCall("/v1/remove", { scope, key: "test" });
     assert(res.status === 404, `expected 404, got ${res.status}`);
     assert(res.body.error?.code === "not_found", `expected not_found`);
   },
@@ -366,7 +378,7 @@ tests.push({
 tests.push({
   name: "Old POST /v1/commit returns 404",
   fn: async () => {
-    const res = await apiCall("/v1/commit", { forScope, input: "hello", output: "hi" });
+    const res = await apiCall("/v1/commit", { scope, input: "hello", output: "hi" });
     assert(res.status === 404, `expected 404, got ${res.status}`);
     assert(res.body.error?.code === "not_found", `expected not_found`);
   },
@@ -375,11 +387,11 @@ tests.push({
 // ── Extraction path tests ───────────────────────────────────────────────────
 
 tests.push({
-  name: "Add with no forKey triggers extraction and returns facts",
+  name: "Add with no key triggers extraction and returns facts",
   fn: async () => {
     const extractionScope = `e2e_extraction_${Date.now()}`;
     const res = await apiCall("/v1/memories", {
-      forScope: extractionScope,
+      scope: extractionScope,
       value:
         "The user's name is Alice and they live in Paris. They are a senior data scientist at Acme Corp.",
     });
@@ -391,17 +403,17 @@ tests.push({
     );
     for (const m of res.body.memories) {
       assert(m.source === "extracted", `expected source "extracted", got "${m.source}"`);
-      assert(m.forKey === null, `expected forKey null for extracted memory, got "${m.forKey}"`);
+      assert(m.key === null, `expected key null for extracted memory, got "${m.key}"`);
     }
   },
 });
 
 tests.push({
-  name: "Add with no forKey returns empty array when extraction finds nothing",
+  name: "Add with no key returns empty array when extraction finds nothing",
   fn: async () => {
     const extractionScope = `e2e_extraction_empty_${Date.now()}`;
     const res = await apiCall("/v1/memories", {
-      forScope: extractionScope,
+      scope: extractionScope,
       value: "Hello there",
     });
     assert(res.status === 200, `expected 200, got ${res.status}`);
@@ -414,18 +426,18 @@ tests.push({
 });
 
 tests.push({
-  name: "Add with forKey bypasses extraction",
+  name: "Add with key bypasses extraction",
   fn: async () => {
     const explicitScope = `e2e_explicit_${Date.now()}`;
     const res = await apiCall("/v1/memories", {
-      forScope: explicitScope,
-      forKey: "name",
+      scope: explicitScope,
+      key: "name",
       value: "Alice",
     });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(res.body.memories.length === 1, `expected 1 memory, got ${res.body.memories.length}`);
     assert(res.body.memories[0].source === "explicit", `expected source "explicit"`);
-    assert(res.body.memories[0].forKey === "name", `expected forKey "name"`);
+    assert(res.body.memories[0].key === "name", `expected key "name"`);
   },
 });
 
@@ -435,7 +447,7 @@ tests.push({
     const extractionScope = `e2e_extraction_recall_${Date.now()}`;
     // Add via extraction path
     const addRes = await apiCall("/v1/memories", {
-      forScope: extractionScope,
+      scope: extractionScope,
       value: "The user is strictly vegetarian and allergic to peanuts",
     });
     assert(addRes.status === 200, `add: expected 200, got ${addRes.status}`);
@@ -443,7 +455,7 @@ tests.push({
 
     // Recall should find them
     const recallRes = await apiCall("/v1/recall", {
-      forScope: extractionScope,
+      scope: extractionScope,
       query: "dietary restrictions",
     });
     assert(recallRes.status === 200, `recall: expected 200, got ${recallRes.status}`);
@@ -459,7 +471,7 @@ tests.push({
   name: "Extraction path rejects oversized value",
   fn: async () => {
     const res = await apiCall("/v1/memories", {
-      forScope,
+      scope,
       value: "x".repeat(20000),
     });
     assert(res.status === 400, `expected 400, got ${res.status}`);
@@ -476,7 +488,7 @@ tests.push({
     const idemScope = `e2e_idem_${Date.now()}`;
     const idemKey = `e2e_idem_key_${Date.now()}`;
     const body = {
-      forScope: idemScope,
+      scope: idemScope,
       value: "The user's name is Bob and they work at Google",
     };
     const res1 = await apiCall("/v1/memories", body, {
@@ -501,7 +513,7 @@ tests.push({
 tests.push({
   name: "List memories for user with memories",
   fn: async () => {
-    const res = await apiCall("/v1/memories/list", { forScope });
+    const res = await apiCall("/v1/memories/list", { scope });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(Array.isArray(res.body.memories), "expected memories array in envelope");
     assert(
@@ -516,7 +528,7 @@ tests.push({
     assert(typeof first.id === "string", "expected id string");
     assert(typeof first.value === "string", "expected value string");
     assert(typeof first.source === "string", "expected source string");
-    assert(typeof first.forScope === "string", "expected forScope string");
+    assert(typeof first.scope === "string", "expected scope string");
   },
 });
 
@@ -524,7 +536,7 @@ tests.push({
   name: "List memories for nonexistent user returns empty",
   fn: async () => {
     const res = await apiCall("/v1/memories/list", {
-      forScope: "no_such_user_ever_memories",
+      scope: "no_such_user_ever_memories",
     });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(Array.isArray(res.body.memories), "expected memories array");
@@ -549,7 +561,7 @@ tests.push({
 tests.push({
   name: "Source filter returns only explicit memories",
   fn: async () => {
-    const res = await apiCall("/v1/memories/list", { forScope, source: "explicit" });
+    const res = await apiCall("/v1/memories/list", { scope, source: "explicit" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     for (const m of res.body.memories) {
       assert(m.source === "explicit", `expected source "explicit", got "${m.source}"`);
@@ -562,11 +574,11 @@ tests.push({
   fn: async () => {
     const searchKey = `search_test_${Date.now()}`;
     await apiCall("/v1/memories", {
-      forScope,
-      forKey: searchKey,
+      scope,
+      key: searchKey,
       value: "xylophone_uniquetoken_987",
     });
-    const res = await apiCall("/v1/memories/list", { forScope, search: "xylophone_uniquetoken" });
+    const res = await apiCall("/v1/memories/list", { scope, search: "xylophone_uniquetoken" });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(
       res.body.memories.length >= 1,
@@ -574,14 +586,14 @@ tests.push({
     );
     const found = res.body.memories.some((m: any) => m.value === "xylophone_uniquetoken_987");
     assert(found, "expected to find memory with the unique search value");
-    await apiCall("/v1/memories/remove", { forScope, forKey: searchKey });
+    await apiCall("/v1/memories/remove", { scope, key: searchKey });
   },
 });
 
 tests.push({
   name: "includeTotal returns total count",
   fn: async () => {
-    const res = await apiCall("/v1/memories/list", { forScope, includeTotal: true });
+    const res = await apiCall("/v1/memories/list", { scope, includeTotal: true });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(
       typeof res.body.total === "number",
@@ -594,7 +606,7 @@ tests.push({
 tests.push({
   name: "includeTotal omitted when not requested",
   fn: async () => {
-    const res = await apiCall("/v1/memories/list", { forScope });
+    const res = await apiCall("/v1/memories/list", { scope });
     assert(res.status === 200, `expected 200, got ${res.status}`);
     assert(!("total" in res.body), `expected total to be absent, but it was present`);
   },
@@ -607,15 +619,15 @@ tests.push({
   fn: async () => {
     for (let i = 1; i <= 8; i++) {
       const res = await apiCall("/v1/memories", {
-        forScope: paginationUserId,
-        forKey: `page_key_${String(i).padStart(2, "0")}`,
+        scope: paginationUserId,
+        key: `page_key_${String(i).padStart(2, "0")}`,
         value: `page_value_${i}`,
       });
       assert(res.status === 200, `set ${i}/8: expected 200, got ${res.status}`);
     }
 
     const page1 = await apiCall("/v1/memories/list", {
-      forScope: paginationUserId,
+      scope: paginationUserId,
       limit: 5,
     });
     assert(page1.status === 200, `page1: expected 200, got ${page1.status}`);
@@ -626,7 +638,7 @@ tests.push({
     assert(page1.body.nextCursor !== null, "page1: expected non-null nextCursor");
 
     const page2 = await apiCall("/v1/memories/list", {
-      forScope: paginationUserId,
+      scope: paginationUserId,
       limit: 5,
       cursor: page1.body.nextCursor,
     });
@@ -650,7 +662,7 @@ tests.push({
   name: "Invalid cursor returns 400",
   fn: async () => {
     const res = await apiCall("/v1/memories/list", {
-      forScope,
+      scope,
       cursor: "not-valid-base64-json!",
     });
     assert(res.status === 400, `expected 400, got ${res.status}`);
@@ -670,8 +682,8 @@ tests.push({
   fn: async () => {
     const superKey = `supersede_test_${Date.now()}`;
     const setRes = await apiCall("/v1/memories", {
-      forScope,
-      forKey: superKey,
+      scope,
+      key: superKey,
       value: "will be superseded",
     });
     assert(setRes.status === 200, `set: expected 200, got ${setRes.status}`);
@@ -683,13 +695,13 @@ tests.push({
       WHERE id = ${memId}::uuid
     `;
 
-    const listRes = await apiCall("/v1/memories/list", { forScope, search: superKey });
+    const listRes = await apiCall("/v1/memories/list", { scope, search: superKey });
     assert(listRes.status === 200, `list: expected 200, got ${listRes.status}`);
     const found = listRes.body.memories.some((m: any) => m.id === memId);
     assert(!found, "expected superseded memory to NOT appear in list");
 
     await testDb`UPDATE wm_memories SET superseded_by = NULL WHERE id = ${memId}::uuid`;
-    await apiCall("/v1/memories/remove", { forScope, forKey: superKey });
+    await apiCall("/v1/memories/remove", { scope, key: superKey });
   },
 });
 
@@ -699,8 +711,8 @@ tests.push({
   name: "Delete memory by ID returns deleted: true",
   fn: async () => {
     const setRes = await apiCall("/v1/memories", {
-      forScope,
-      forKey: "to_delete_by_id",
+      scope,
+      key: "to_delete_by_id",
       value: "temp",
     });
     assert(setRes.status === 200, `set: expected 200, got ${setRes.status}`);
@@ -712,9 +724,12 @@ tests.push({
     });
     assert(delRes.status === 200, `delete: expected 200, got ${delRes.status}`);
     const delBody = (await delRes.json()) as any;
-    assert(delBody.deleted === true, `expected deleted: true`);
+    assert(
+      delBody.result?.deleted === true,
+      `expected result.deleted: true, got ${JSON.stringify(delBody.result)}`
+    );
 
-    const getRes = await apiCall("/v1/memories/get", { forScope, forKey: "to_delete_by_id" });
+    const getRes = await apiCall("/v1/memories/get", { scope, key: "to_delete_by_id" });
     assert(getRes.body.memory === null, "expected memory to be gone after delete");
   },
 });
@@ -728,7 +743,10 @@ tests.push({
     });
     assert(delRes.status === 200, `expected 200, got ${delRes.status}`);
     const delBody = (await delRes.json()) as any;
-    assert(delBody.deleted === false, `expected deleted: false`);
+    assert(
+      delBody.result?.deleted === false,
+      `expected result.deleted: false, got ${JSON.stringify(delBody.result)}`
+    );
   },
 });
 
@@ -751,7 +769,7 @@ tests.push({
   name: "Recall with defaults for nonexistent user returns defaults in context",
   fn: async () => {
     const res = await apiCall("/v1/recall", {
-      forScope: "recall_defaults_test_user",
+      scope: "recall_defaults_test_user",
       query: "hello",
       defaults: { plan: "pro", tier: "beta" },
     });
@@ -770,7 +788,7 @@ tests.push({
     const client = createClient({ apiKey: API_KEY!, baseUrl: BASE_URL });
     client.register({ theme: "dark", language: "en" });
     const result = await client.recall({
-      forScope: "sdk_register_test_nonexistent_user",
+      scope: "sdk_register_test_nonexistent_user",
       query: "hello",
     });
     assert(result.context.includes("theme: dark"), `expected "theme: dark" in context`);
@@ -790,8 +808,14 @@ tests.push({
     });
     assert(response.status === 200, `expected 200, got ${response.status}`);
     const body = (await response.json()) as any;
-    assert(body.source === "default", `expected source "default", got "${body.source}"`);
-    assert(body.prompt === null, `expected null prompt, got "${body.prompt}"`);
+    assert(
+      body.extractionPrompt?.source === "default",
+      `expected source "default", got "${body.extractionPrompt?.source}"`
+    );
+    assert(
+      body.extractionPrompt?.prompt === null,
+      `expected null prompt, got "${body.extractionPrompt?.prompt}"`
+    );
   },
 });
 
@@ -809,10 +833,13 @@ tests.push({
       prompt: "You are a custom extraction prompt for testing.",
     });
     assert(res.status === 200, `expected 200, got ${res.status}`);
-    assert(res.body.source === "custom", `expected source "custom"`);
     assert(
-      res.body.prompt === "You are a custom extraction prompt for testing.",
-      `expected prompt to match`
+      res.body.extractionPrompt?.source === "custom",
+      `expected source "custom", got "${res.body.extractionPrompt?.source}"`
+    );
+    assert(
+      res.body.extractionPrompt?.prompt === "You are a custom extraction prompt for testing.",
+      `expected prompt to match, got "${res.body.extractionPrompt?.prompt}"`
     );
   },
 });
@@ -826,16 +853,19 @@ tests.push({
     });
     assert(response.status === 200, `expected 200, got ${response.status}`);
     const body = (await response.json()) as any;
-    assert(body.source === "custom", `expected source "custom"`);
     assert(
-      body.prompt === "You are a custom extraction prompt for testing.",
-      `expected custom prompt text`
+      body.extractionPrompt?.source === "custom",
+      `expected source "custom", got "${body.extractionPrompt?.source}"`
+    );
+    assert(
+      body.extractionPrompt?.prompt === "You are a custom extraction prompt for testing.",
+      `expected custom prompt text, got "${body.extractionPrompt?.prompt}"`
     );
   },
 });
 
 tests.push({
-  name: "Reset extraction prompt returns reset: true",
+  name: "Reset extraction prompt returns result.reset: true",
   fn: async () => {
     const response = await fetch(`${BASE_URL}/v1/account/extraction-prompt`, {
       method: "DELETE",
@@ -843,7 +873,10 @@ tests.push({
     });
     assert(response.status === 200, `expected 200, got ${response.status}`);
     const body = (await response.json()) as any;
-    assert(body.reset === true, `expected reset: true, got ${body.reset}`);
+    assert(
+      body.result?.reset === true,
+      `expected result.reset: true, got ${JSON.stringify(body.result)}`
+    );
   },
 });
 
@@ -856,8 +889,14 @@ tests.push({
     });
     assert(response.status === 200, `expected 200, got ${response.status}`);
     const body = (await response.json()) as any;
-    assert(body.source === "default", `expected source "default" after reset`);
-    assert(body.prompt === null, `expected null prompt after reset`);
+    assert(
+      body.extractionPrompt?.source === "default",
+      `expected source "default" after reset, got "${body.extractionPrompt?.source}"`
+    );
+    assert(
+      body.extractionPrompt?.prompt === null,
+      `expected null prompt after reset, got "${body.extractionPrompt?.prompt}"`
+    );
   },
 });
 
@@ -884,8 +923,8 @@ if (API_KEY_B) {
     name: "Cross-account delete returns deleted: false (ownership boundary)",
     fn: async () => {
       const setRes = await apiCall("/v1/memories", {
-        forScope,
-        forKey: "cross_acct_test",
+        scope,
+        key: "cross_acct_test",
         value: "secret",
       });
       assert(setRes.status === 200, `set: expected 200, got ${setRes.status}`);
@@ -898,11 +937,11 @@ if (API_KEY_B) {
       assert(delRes.status === 200, `cross-account delete: expected 200, got ${delRes.status}`);
       const delBody = (await delRes.json()) as any;
       assert(
-        delBody.deleted === false,
-        `expected deleted: false (Account B cannot delete Account A's memory), got ${delBody.deleted}`
+        delBody.result?.deleted === false,
+        `expected result.deleted: false (Account B cannot delete Account A's memory), got ${JSON.stringify(delBody.result)}`
       );
 
-      const getRes = await apiCall("/v1/memories/get", { forScope, forKey: "cross_acct_test" });
+      const getRes = await apiCall("/v1/memories/get", { scope, key: "cross_acct_test" });
       assert(
         getRes.body.memory !== null,
         "expected memory to still exist after cross-account delete attempt"
@@ -918,7 +957,10 @@ if (API_KEY_B) {
       });
       assert(cleanupRes.status === 200, `cleanup delete: expected 200`);
       const cleanupBody = (await cleanupRes.json()) as any;
-      assert(cleanupBody.deleted === true, `cleanup: expected deleted: true`);
+      assert(
+        cleanupBody.result?.deleted === true,
+        `cleanup: expected result.deleted: true, got ${JSON.stringify(cleanupBody.result)}`
+      );
     },
   });
 } else {
@@ -935,9 +977,9 @@ tests.push({
   name: "quota_exceeded on /v1/memories when memory limit reached",
   fn: async () => {
     for (let i = 1; i <= 3; i++) {
-      await apiCall("/v1/memories/remove", { forScope: quotaUserId, forKey: `quota_key_${i}` });
+      await apiCall("/v1/memories/remove", { scope: quotaUserId, key: `quota_key_${i}` });
     }
-    await apiCall("/v1/memories/remove", { forScope: quotaUserId, forKey: "quota_key_4" });
+    await apiCall("/v1/memories/remove", { scope: quotaUserId, key: "quota_key_4" });
 
     const [{ count: baseCount }] = await testDb`
       SELECT count(*)::int AS count FROM wm_memories
@@ -947,8 +989,8 @@ tests.push({
     try {
       for (let i = 1; i <= 3; i++) {
         const res = await apiCall("/v1/memories", {
-          forScope: quotaUserId,
-          forKey: `quota_key_${i}`,
+          scope: quotaUserId,
+          key: `quota_key_${i}`,
           value: `value_${i}`,
         });
         assert(res.status === 200, `set ${i}/3: expected 200, got ${res.status}`);
@@ -961,8 +1003,8 @@ tests.push({
       await updateTestAccount({ memory_limit: currentCount });
 
       const res = await apiCall("/v1/memories", {
-        forScope: quotaUserId,
-        forKey: "quota_key_4",
+        scope: quotaUserId,
+        key: "quota_key_4",
         value: "should_fail",
       });
       assert(res.status === 403, `4th set: expected 403, got ${res.status}`);
@@ -982,8 +1024,8 @@ tests.push({
       await updateTestAccount({ memory_limit: 1000 });
       for (let i = 1; i <= 3; i++) {
         await apiCall("/v1/memories/remove", {
-          forScope: quotaUserId,
-          forKey: `quota_key_${i}`,
+          scope: quotaUserId,
+          key: `quota_key_${i}`,
         });
       }
     }
@@ -996,7 +1038,7 @@ tests.push({
     await updateTestAccount({ memory_limit: 0 });
     try {
       const res = await apiCall("/v1/memories", {
-        forScope: quotaUserId,
+        scope: quotaUserId,
         value: "My favorite color is blue.",
       });
       assert(res.status === 403, `expected 403, got ${res.status}`);
@@ -1050,18 +1092,27 @@ tests.push({
         prompt: "Pro-tier custom prompt for testing.",
       });
       assert(res.status === 200, `expected 200, got ${res.status}`);
-      assert(res.body.source === "custom", `expected source "custom"`);
-      assert(res.body.prompt === "Pro-tier custom prompt for testing.", `expected prompt to match`);
+      assert(
+        res.body.extractionPrompt?.source === "custom",
+        `expected source "custom", got "${res.body.extractionPrompt?.source}"`
+      );
+      assert(
+        res.body.extractionPrompt?.prompt === "Pro-tier custom prompt for testing.",
+        `expected prompt to match, got "${res.body.extractionPrompt?.prompt}"`
+      );
 
       const getRes = await fetch(`${BASE_URL}/v1/account/extraction-prompt`, {
         method: "GET",
         headers: { Authorization: `Bearer ${API_KEY}` },
       });
       const getBody = (await getRes.json()) as any;
-      assert(getBody.source === "custom", `GET: expected source "custom"`);
       assert(
-        getBody.prompt === "Pro-tier custom prompt for testing.",
-        `GET: expected prompt to match`
+        getBody.extractionPrompt?.source === "custom",
+        `GET: expected source "custom", got "${getBody.extractionPrompt?.source}"`
+      );
+      assert(
+        getBody.extractionPrompt?.prompt === "Pro-tier custom prompt for testing.",
+        `GET: expected prompt to match, got "${getBody.extractionPrompt?.prompt}"`
       );
     } finally {
       await updateTestAccount({ plan_tier: "free", extraction_prompt: null });
@@ -1078,7 +1129,7 @@ async function main() {
 
   console.log(`\n\u25b6 Running WithMemory E2E tests`);
   console.log(`  Base URL:    ${BASE_URL}`);
-  console.log(`  Scope:       ${forScope}`);
+  console.log(`  Scope:       ${scope}`);
   console.log(`  Account ID:  ${testAccountId}\n`);
 
   try {
