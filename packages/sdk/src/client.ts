@@ -11,6 +11,8 @@ import type {
   RemoveParams,
   RemoveResponse,
   HealthResponse,
+  WhoamiResponse,
+  UsageResponse,
   RecallOptions,
   RegisterDefaults,
   ExtractionPromptResponse,
@@ -133,6 +135,14 @@ export class WithMemoryClient {
 
   async health(options?: RequestOptions): Promise<HealthResponse> {
     return this.request<HealthResponse>("GET", "/v1/health", undefined, options);
+  }
+
+  async whoami(options?: RequestOptions): Promise<WhoamiResponse> {
+    return this.request<WhoamiResponse>("GET", "/v1/account", undefined, options);
+  }
+
+  async usage(options?: RequestOptions): Promise<UsageResponse> {
+    return this.request<UsageResponse>("GET", "/v1/account/usage", undefined, options);
   }
 
   async setExtractionPrompt(

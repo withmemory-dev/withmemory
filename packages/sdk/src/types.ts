@@ -96,6 +96,36 @@ export interface HealthResponse {
   request_id?: string;
 }
 
+export interface WhoamiResponse {
+  account: {
+    id: string;
+    email: string;
+    planTier: string;
+    planStatus: string;
+    memoryLimit: number;
+    monthlyApiCallLimit: number | null;
+    createdAt: string;
+  };
+  key: {
+    id: string;
+    scopes: string;
+    name: string | null;
+    createdAt: string;
+    expiresAt: string | null;
+  };
+  request_id?: string;
+}
+
+export interface UsageResponse {
+  usage: {
+    memoryCount: number;
+    memoryLimit: number;
+    containerCount: number;
+    containerLimit: number | null;
+  };
+  request_id?: string;
+}
+
 export interface RecallOptions {
   scope: string;
   query: string;

@@ -255,6 +255,42 @@ interface ListResponse {
 }
 ```
 
+### WhoamiResponse / UsageResponse
+
+```ts
+interface WhoamiResponse {
+  account: {
+    id: string;
+    email: string;
+    planTier: string;
+    planStatus: string;
+    memoryLimit: number;
+    monthlyApiCallLimit: number | null;
+    createdAt: string;
+  };
+  key: {
+    id: string;
+    scopes: string;           // e.g. "memory:read,memory:write,account:admin"
+    name: string | null;
+    createdAt: string;
+    expiresAt: string | null;
+  };
+  request_id?: string;
+}
+
+interface UsageResponse {
+  usage: {
+    memoryCount: number;
+    memoryLimit: number;
+    containerCount: number;
+    containerLimit: number | null;  // null = unlimited (enterprise)
+  };
+  request_id?: string;
+}
+```
+
+`whoami()` lets an agent discover its own key scopes, plan tier, and account metadata without trial-and-error. `usage()` returns current quota consumption so agents can check before hitting limits.
+
 ### ExtractionPromptResponse / ResetExtractionPromptResponse
 
 ```ts
@@ -287,6 +323,8 @@ interface ResetExtractionPromptResponse {
 | `list(options?)` | `POST /v1/memories/list` | `ListResponse` | Yes |
 | `delete(memoryId)` | `DELETE /v1/memories/:id` | `RemoveResponse` | Yes |
 | `health()` | `GET /v1/health` | `HealthResponse` | Yes |
+| `whoami()` | `GET /v1/account` | `WhoamiResponse` | Yes |
+| `usage()` | `GET /v1/account/usage` | `UsageResponse` | Yes |
 | `setExtractionPrompt(prompt)` | `POST /v1/account/extraction-prompt` | `ExtractionPromptResponse` | Yes |
 | `getExtractionPrompt()` | `GET /v1/account/extraction-prompt` | `ExtractionPromptResponse` | Yes |
 | `resetExtractionPrompt()` | `DELETE /v1/account/extraction-prompt` | `ResetExtractionPromptResponse` | Yes |

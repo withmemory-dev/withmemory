@@ -1,13 +1,21 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import { eq } from "drizzle-orm";
+import { eq, and, isNull, sql } from "drizzle-orm";
 import * as schema from "../../db/schema";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { zodErrorHook } from "../../lib/validation";
 import { requirePlan, PlanEnforcementError } from "../../lib/plan-enforcement";
 
-const { wmAccounts } = schema;
+const { wmAccounts, wmMemories } = schema;
+
+const CONTAINER_LIMITS: Record<string, number | null> = {
+  free: 0,
+  basic: 0,
+  pro: 10,
+  team: 100,
+  enterprise: null, // unlimited
+};
 
 const SetPromptSchema = z
   .object({
@@ -22,6 +30,60 @@ const setPromptValidator = zValidator("json", SetPromptSchema, zodErrorHook);
 
 export function accountRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
+
+  // GET /account — whoami: key scopes, plan tier, account metadata
+  app.get("/account", async (c) => {
+    const account = c.get("account");
+    const apiKey = c.get("apiKey");
+
+    return c.json({
+      account: {
+        id: account.id,
+        email: account.email,
+        planTier: account.planTier,
+        planStatus: account.planStatus,
+        memoryLimit: account.memoryLimit,
+        monthlyApiCallLimit: account.monthlyApiCallLimit,
+        createdAt: account.createdAt.toISOString(),
+      },
+      key: {
+        id: apiKey.id,
+        scopes: apiKey.scopes,
+        name: apiKey.name,
+        createdAt: apiKey.createdAt.toISOString(),
+        expiresAt: apiKey.expiresAt?.toISOString() ?? null,
+      },
+      request_id: c.get("requestId"),
+    });
+  });
+
+  // GET /account/usage — current quota usage
+  app.get("/account/usage", async (c) => {
+    const db = c.get("db");
+    const account = c.get("account");
+
+    const [memoryCountRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(wmMemories)
+      .where(and(eq(wmMemories.accountId, account.id), isNull(wmMemories.supersededBy)));
+
+    const [containerCountRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(wmAccounts)
+      .where(eq(wmAccounts.parentAccountId, account.id));
+
+    const containerLimit = CONTAINER_LIMITS[account.planTier] ?? 0;
+
+    return c.json({
+      usage: {
+        memoryCount: memoryCountRow?.count ?? 0,
+        memoryLimit: account.memoryLimit,
+        containerCount: containerCountRow?.count ?? 0,
+        containerLimit,
+      },
+      request_id: c.get("requestId"),
+    });
+  });
 
   // POST /account/extraction-prompt — set custom extraction prompt
   app.post("/account/extraction-prompt", setPromptValidator, async (c) => {

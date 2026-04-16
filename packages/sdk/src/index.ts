@@ -30,6 +30,8 @@ export type {
   RecallResponse,
   RemoveResponse,
   HealthResponse,
+  WhoamiResponse,
+  UsageResponse,
   RecallOptions,
   RequestOptions,
   RegisterDefaults,
@@ -128,6 +130,14 @@ export const memory = {
 
   health(options?: RequestOptions) {
     return getInstance().health(options);
+  },
+
+  whoami(options?: RequestOptions) {
+    return getInstance().whoami(options);
+  },
+
+  usage(options?: RequestOptions) {
+    return getInstance().usage(options);
   },
 
   setExtractionPrompt(prompt: string, options?: RequestOptions) {
