@@ -16,20 +16,20 @@ memory.configure({
   ...(BASE_URL ? { baseUrl: BASE_URL } : {}),
 });
 
-const forScope = "demo-user";
+const scope = "demo-user";
 const userMessage = "What stack should I use for my new project?";
 
 // ── Step 1: Store facts about the user ────────────────────────────────────────
 
 console.log("\n1. Adding memories...\n");
 
-const nameResult = await memory.add({ value: "Andrew", forKey: "name", forScope });
+const nameResult = await memory.add({ value: "Andrew", key: "name", scope });
 console.log(`   add name → ${nameResult.memories[0].value}`);
 
 const stackResult = await memory.add({
   value: "TypeScript, Next.js, Cloudflare Workers",
-  forKey: "tech_stack",
-  forScope,
+  key: "tech_stack",
+  scope,
 });
 console.log(`   add tech_stack → ${stackResult.memories[0].value}`);
 
@@ -38,14 +38,14 @@ console.log(`   add tech_stack → ${stackResult.memories[0].value}`);
 console.log("\n2. Recalling memories...\n");
 
 const { context, memories } = await memory.recall({
-  forScope,
+  scope,
   query: userMessage,
 });
 
 console.log(`   context:\n   "${context}"\n`);
 console.log(`   ${memories.length} memories returned:`);
 for (const m of memories) {
-  console.log(`     - ${m.forKey}: ${m.value}`);
+  console.log(`     - ${m.key}: ${m.value}`);
 }
 
 // ── Step 3: Use context in an LLM call via Vercel AI SDK ──────────────────────
@@ -71,8 +71,8 @@ if (!OPENAI_KEY) {
 
 console.log("4. Verifying stored memories with get()...\n");
 
-const nameCheck = await memory.get({ forScope, forKey: "name" });
-const stackCheck = await memory.get({ forScope, forKey: "tech_stack" });
+const nameCheck = await memory.get({ scope, key: "name" });
+const stackCheck = await memory.get({ scope, key: "tech_stack" });
 console.log(`   get name → ${nameCheck.memory?.value ?? "(not found)"}`);
 console.log(`   get tech_stack → ${stackCheck.memory?.value ?? "(not found)"}`);
 
@@ -84,7 +84,7 @@ const reply =
   llmResponse ?? "I'd recommend sticking with your current stack since you already know it well.";
 
 const extractionResult = await memory.add({
-  forScope,
+  scope,
   value: `User: ${userMessage}\nAssistant: ${reply}`,
 });
 

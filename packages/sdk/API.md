@@ -100,7 +100,6 @@ try {
 | `PlanRequiredError` | `plan_required` |
 | `ContainerLimitExceededError` | `container_limit_exceeded` |
 | `ContainerNameExistsError` | `container_name_exists` |
-| `ConfirmationRequiredError` | `confirmation_required` |
 | `ExtractionFailedError` | `extraction_failed` |
 | `RateLimitedError` | `rate_limited` |
 | `CacheEntryLimitError` | `cache_entry_limit` |
@@ -121,7 +120,6 @@ try {
 | `plan_required` | Server | 403 | Feature requires a higher plan tier |
 | `container_limit_exceeded` | Server | 403 | Account has reached its container cap |
 | `container_name_exists` | Server | 409 | A container with this name already exists under the parent account |
-| `confirmation_required` | Server | 400 | Destructive action requires `{ confirm: true }` in body |
 | `extraction_failed` | Server | 500 | LLM extraction pipeline failed (extraction path only) |
 | `rate_limited` | Server | 429 | Cache creation (3/IP/24h) or auth code request (3/email/hour) rate limit |
 | `cache_entry_limit` | Server | 403 | Cache entry cap reached (50 entries per cache) |

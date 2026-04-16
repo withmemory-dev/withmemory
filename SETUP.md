@@ -5,7 +5,7 @@
 
 ## What is WithMemory
 
-WithMemory is the default memory layer for AI agents. Developers integrate it with two API calls — `memory.set()` to store facts explicitly, and `memory.recall()` to retrieve a prompt-ready context block before every LLM invocation. A third call, `memory.commit()`, runs async LLM extraction to pull durable facts out of conversation turns.
+WithMemory is the default memory layer for AI agents. Developers integrate it with two API calls — `memory.add()` to store facts (pass `key` for explicit writes or omit it to trigger synchronous LLM extraction), and `memory.recall()` to retrieve a prompt-ready context block before every LLM invocation.
 
 This repository contains the server (API + extraction pipeline) and the client SDK. It is a pnpm workspace monorepo.
 
@@ -113,12 +113,12 @@ You should see `{"status":"ok","database":"connected",...}`.
 1. Edit files in `packages/server/src/`
 2. Wrangler hot-reloads automatically
 3. Test endpoints with curl or your HTTP client of choice
-4. When ready to ship: `pnpm --filter @withmemory/server deploy`
+4. When ready to ship: `pnpm --filter @withmemory/server worker:deploy`
 5. Commit and push
 
 ### Deploying the server
 ```bash
-pnpm --filter @withmemory/server deploy
+pnpm --filter @withmemory/server worker:deploy
 ```
 
 This runs `wrangler deploy`, which bundles the code and ships it to Cloudflare. The deployed Worker is at `https://api.withmemory.dev`.
@@ -140,11 +140,11 @@ Five tables, all prefixed `wm_`:
 
 **`wm_api_keys`** — API keys belonging to accounts. Stores hashed keys, never plaintext. Indexed on `key_hash` for fast lookup during request authentication.
 
-**`wm_end_users`** — The developers' end users. Identified by `external_id`, which is whatever string the developer passes as `userId`. Unique within an account.
+**`wm_end_users`** — The developers' end users. Identified by `external_id`, which is whatever string the developer passes as `scope`. Unique within an account.
 
-**`wm_exchanges`** — Conversation turns submitted via `commit()`. Stores input/output pairs, extraction status, and prompt version for eval harness analysis. Supports idempotency via a partial unique index on `(account_id, idempotency_key)`.
+**`wm_exchanges`** — Conversation turns submitted to `memory.add()` without `key` (the extraction path). Stores inputs, extraction status, and prompt version for eval harness analysis. Supports idempotency via a partial unique index on `(account_id, idempotency_key)`.
 
-**`wm_memories`** — The actual memories. Both explicit (via `set()`) and extracted (via `commit()`) live here, distinguished by a `source` column. Has a `vector(512)` embedding column with an HNSW index for cosine similarity search. Extracted memories link back to their source exchange via `exchange_id`.
+**`wm_memories`** — The actual memories. Both explicit (`memory.add()` with `key`) and extracted (`memory.add()` without `key`) live here, distinguished by a `source` column. Has a `vector(512)` embedding column with an HNSW index for cosine similarity search. Extracted memories link back to their source exchange via `exchange_id`.
 
 See `packages/server/src/db/schema.ts` for the full definitions.
 
@@ -155,15 +155,22 @@ See `packages/server/src/db/schema.ts` for the full definitions.
 
 ## What exists
 
-- **Server routes:** Eleven `/v1/*` routes are live: `POST /v1/set`, `/v1/get`, `/v1/recall`, `/v1/remove`, `/v1/commit`, `/v1/memories`, `DELETE /v1/memories/:id`, `GET /v1/health`, and `POST/GET/DELETE /v1/account/extraction-prompt`. All require Bearer token auth.
-- **Extraction pipeline:** `POST /v1/commit` accepts conversation turns, returns 202 immediately, and runs async LLM extraction via `waitUntil`. Extraction uses gpt-4.1-mini, embeddings use text-embedding-3-small at 512 dimensions. Supports `Idempotency-Key` header. Customer-configurable extraction prompts via the account routes.
+- **Server routes:** Twenty-seven `/v1/*` routes are live, grouped by area:
+  - **Memories (7):** `POST /v1/memories` (add, explicit or extraction), `POST /v1/memories/get`, `POST /v1/memories/remove`, `POST /v1/memories/list`, `DELETE /v1/memories/:id`, `POST /v1/recall`, `GET /v1/health`
+  - **Account (5):** `GET /v1/account` (whoami), `GET /v1/account/usage`, `POST/GET/DELETE /v1/account/extraction-prompt`
+  - **Containers (6):** `POST /v1/containers`, `GET /v1/containers`, `GET /v1/containers/:id`, `POST /v1/containers/:id/keys`, `DELETE /v1/containers/:id/keys/:keyId`, `DELETE /v1/containers/:id`
+  - **Cache (7):** `POST /v1/cache` (create), `POST /v1/cache/preview`, `POST /v1/cache/set`, `POST /v1/cache/get`, `POST /v1/cache/delete`, `GET /v1/cache/list`, `POST /v1/cache/claim`
+  - **Auth (2):** `POST /v1/auth/request-code`, `POST /v1/auth/verify-code`
+
+  Memory/account/container routes require Bearer API key auth. Cache CRUD uses short-lived cache tokens (also Bearer). Cache creation/preview and the two `/auth/*` routes are unauthenticated.
+- **Extraction pipeline:** `POST /v1/memories` without `key` triggers synchronous LLM extraction before returning (200 with the extracted memories in the response). Extraction uses gpt-4.1-mini, embeddings use text-embedding-3-small at 512 dimensions. Supports `Idempotency-Key` header. Customer-configurable extraction prompts via the account routes.
 - **Semantic ranking:** `recall()` ranks memories by cosine similarity, recency decay, importance, and source tier (explicit > extracted). Similarity floor at 0.2.
 - **Deduplication:** Extracted memories are classified against existing ones — near-duplicates (>=0.92) supersede, conflicts (0.78-0.92) respect explicit > extracted hierarchy, novel facts (<0.78) insert normally.
-- **SDK:** `@withmemory/sdk` at `packages/sdk/` — 13 methods live. `register()` stores defaults and forwards them to `recall()` as tier 4 fallback.
+- **SDK:** `@withmemory/sdk` at `packages/sdk/` — 21 methods live (13 core methods plus 6 on `memory.containers.*` and 2 on `memory.cache.*`; `cache.create()` returns a `CacheInstance` with 4 additional methods for entry CRUD). `register()` stores defaults and forwards them to `recall()` as a tier-4 fallback.
 - **Auth:** API key middleware with SHA-256 hash lookup and `last_used_at` fire-and-forget updates via `ctx.waitUntil`.
-- **E2E tests:** 41 tests passing against both local and production (40 without `WITHMEMORY_API_KEY_B`, 41 with), covering all routes plus auth, validation, idempotency, defaults, SDK register flow, extraction prompt CRUD, cross-account ownership, and plan enforcement (quota + feature gates).
+- **E2E tests:** 72 tests passing against production (55 in `test-add-recall.ts` covering memories/recall/list/extraction/quotas, 17 in `test-containers.ts` covering Path B container endpoints and cross-account isolation). Both suites require `WITHMEMORY_API_KEY_B` and `DATABASE_URL`.
 - **Eval harness:** `packages/eval/` with 50 extraction fixtures (extraction eval) and 30 recall fixtures (recall eval with ranking quality metrics).
-- **Plan enforcement:** `POST /v1/set` and `POST /v1/commit` check memory quota before write (403 `quota_exceeded`). `POST /v1/account/extraction-prompt` gated to pro/team/enterprise tiers (403 `plan_required`).
+- **Plan enforcement:** `POST /v1/memories` checks memory quota before every write, including the extraction path (403 `quota_exceeded`). `POST /v1/account/extraction-prompt` and all `POST /v1/containers*` routes are gated to pro/team/enterprise tiers (403 `plan_required`). `POST /v1/cache/claim` enforces the parent account's memory quota before creating the container and memories.
 - **Example:** `examples/vercel-ai-sdk/` demonstrates the SDK integration pattern with the Vercel AI SDK.
 
 ## Test baselines
