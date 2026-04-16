@@ -6,6 +6,7 @@ import * as schema from "../../db/schema";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { zodErrorHook } from "../../lib/validation";
 import { sha256Hex } from "../../lib/hash";
+import { getClientIp } from "../../lib/ip";
 
 const { wmAuthCodes, wmAccounts, wmApiKeys } = schema;
 
@@ -34,9 +35,34 @@ export function authRoute() {
     const db = c.get("db");
     const { email } = c.req.valid("json");
     const normalizedEmail = email.toLowerCase();
+    const ip = getClientIp(c);
 
-    // Rate limit: 3 codes per email per hour
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+
+    // Per-IP rate limit — 20 codes/hour. Catches automated abuse (cycling
+    // email addresses from a single source to burn sending reputation) while
+    // leaving headroom for shared IPs like corporate NATs and VPNs.
+    if (ip !== "unknown") {
+      const [ipCountRow] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(wmAuthCodes)
+        .where(and(eq(wmAuthCodes.ipAddress, ip), gt(wmAuthCodes.createdAt, oneHourAgo)));
+
+      if ((ipCountRow?.count ?? 0) >= 20) {
+        return c.json(
+          {
+            error: {
+              code: "rate_limited",
+              message: "Too many code requests from this network. Try again later.",
+              request_id: c.get("requestId"),
+            },
+          },
+          429
+        );
+      }
+    }
+
+    // Per-email rate limit: 3 codes per email per hour
     const [countRow] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(wmAuthCodes)
@@ -55,14 +81,18 @@ export function authRoute() {
       );
     }
 
-    // Generate 6-digit code
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate 6-digit code using a CSPRNG. Modulo bias is ~0.00002% which is
+    // negligible for a 6-digit code; rejection sampling would be overkill.
+    const codeBuf = new Uint32Array(1);
+    crypto.getRandomValues(codeBuf);
+    const code = (100000 + (codeBuf[0] % 900000)).toString();
     const codeHash = await sha256Hex(code);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     await db.insert(wmAuthCodes).values({
       email: normalizedEmail,
       codeHash,
+      ipAddress: ip === "unknown" ? null : ip,
       expiresAt,
     });
 

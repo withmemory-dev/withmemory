@@ -75,8 +75,11 @@ export function authMiddleware(db: Db) {
     c.set("account", account);
     c.set("apiKey", apiKey);
 
-    // Read optional attribution header for observability
-    const clientId = c.req.header("X-WithMemory-Client") || null;
+    // Read optional attribution header for observability. Strip control chars
+    // and cap length so a crafted value can't inject newlines into log lines
+    // or blow out downstream log parsers.
+    const rawClientId = c.req.header("X-WithMemory-Client") || "";
+    const clientId = rawClientId.replace(/[\r\n\t\x00-\x1f]/g, "").slice(0, 128) || null;
     c.set("clientId", clientId);
     console.log(
       `[client: ${clientId || "unknown"}] ${c.req.method} ${c.req.path} account=${account.id}`

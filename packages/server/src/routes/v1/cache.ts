@@ -10,9 +10,21 @@ import { getClientIp } from "../../lib/ip";
 import { cacheAuthMiddleware } from "../../middleware/cache-auth";
 import { authMiddleware } from "../../middleware/auth";
 import { createDb } from "../../db/client";
-import { ensureEndUser } from "../../lib/end-users";
+import { checkMemoryQuota, PlanEnforcementError } from "../../lib/plan-enforcement";
 
 const { wmCaches, wmCacheEntries, wmAccounts, wmMemories } = schema;
+
+/**
+ * Signals a race-condition failure detected inside the claim transaction.
+ * Outside the transaction, the handler maps this to the appropriate HTTP
+ * status and error envelope so the rollback is invisible to the caller.
+ */
+class ClaimRaceError extends Error {
+  constructor(readonly code: "not_found" | "already_claimed" | "cache_expired") {
+    super(code);
+    this.name = "ClaimRaceError";
+  }
+}
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────
 
@@ -392,50 +404,108 @@ export function cacheRoute() {
       .from(wmCacheEntries)
       .where(eq(wmCacheEntries.cacheId, cache.id));
 
-    // Create a container for the claimed memories
-    const subEmailSuffix = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
-    const subEmail = `cache_${subEmailSuffix}@sub.withmemory.internal`;
-    const shortId = cache.id.slice(0, 8);
-
-    const [container] = await db
-      .insert(wmAccounts)
-      .values({
-        email: subEmail,
-        name: `Claimed cache ${shortId}`,
-        metadata: {},
-        parentAccountId: account.id,
-        planTier: account.planTier,
-        memoryLimit: account.memoryLimit,
-      })
-      .returning();
-
-    // Create end user and memories for each entry
-    const endUser = await ensureEndUser(db, container.id, `cache-${cache.id}`);
-
-    for (const entry of entries) {
-      await db.insert(wmMemories).values({
-        accountId: container.id,
-        endUserId: endUser.id,
-        key: entry.key,
-        content: entry.value,
-        source: "explicit",
-      });
+    // Quota check: enforce the parent account's memory limit before we create
+    // any rows. Without this the claim path bypasses the quota system entirely
+    // (memories end up under a new container, which inherits the parent's plan).
+    try {
+      await checkMemoryQuota(db, account, entries.length);
+    } catch (e) {
+      if (e instanceof PlanEnforcementError) {
+        const body = e.toResponseBody();
+        body.error.request_id = c.get("requestId");
+        return c.json(body, 403);
+      }
+      throw e;
     }
 
-    // Mark cache as claimed
-    await db
-      .update(wmCaches)
-      .set({
-        claimedByAccountId: account.id,
-        claimedAt: new Date(),
-      })
-      .where(eq(wmCaches.id, cache.id));
+    // Wrap container + end user + memory inserts + cache claim update in a
+    // single transaction. SELECT ... FOR UPDATE on the cache row serializes
+    // concurrent claims on the same token, and an atomic commit means a
+    // partial failure cannot leave an orphaned container with the cache
+    // still marked as claimable.
+    let claimResult: { containerId: string; memoriesCreated: number };
+    try {
+      claimResult = await db.transaction(async (tx) => {
+        const [freshCache] = await tx
+          .select()
+          .from(wmCaches)
+          .where(eq(wmCaches.id, cache.id))
+          .for("update")
+          .limit(1);
+
+        if (!freshCache) {
+          throw new ClaimRaceError("not_found");
+        }
+        if (freshCache.claimedAt !== null) {
+          throw new ClaimRaceError("already_claimed");
+        }
+        if (freshCache.expiresAt.getTime() < Date.now()) {
+          throw new ClaimRaceError("cache_expired");
+        }
+
+        const subEmailSuffix = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+        const subEmail = `cache_${subEmailSuffix}@sub.withmemory.internal`;
+        const shortId = cache.id.slice(0, 8);
+
+        const [container] = await tx
+          .insert(wmAccounts)
+          .values({
+            email: subEmail,
+            name: `Claimed cache ${shortId}`,
+            metadata: {},
+            parentAccountId: account.id,
+            planTier: account.planTier,
+            memoryLimit: account.memoryLimit,
+          })
+          .returning();
+
+        const [endUser] = await tx
+          .insert(schema.wmEndUsers)
+          .values({ accountId: container.id, externalId: `cache-${cache.id}` })
+          .returning();
+
+        for (const entry of entries) {
+          await tx.insert(wmMemories).values({
+            accountId: container.id,
+            endUserId: endUser.id,
+            key: entry.key,
+            content: entry.value,
+            source: "explicit",
+          });
+        }
+
+        await tx
+          .update(wmCaches)
+          .set({
+            claimedByAccountId: account.id,
+            claimedAt: new Date(),
+          })
+          .where(eq(wmCaches.id, cache.id));
+
+        return { containerId: container.id, memoriesCreated: entries.length };
+      });
+    } catch (e) {
+      if (e instanceof ClaimRaceError) {
+        const status = e.code === "not_found" ? 404 : e.code === "cache_expired" ? 410 : 409;
+        const message =
+          e.code === "not_found"
+            ? "Cache not found"
+            : e.code === "cache_expired"
+              ? "Cache has expired"
+              : "Cache has already been claimed";
+        return c.json(
+          { error: { code: e.code, message, request_id: c.get("requestId") } },
+          status
+        );
+      }
+      throw e;
+    }
 
     return c.json({
       result: {
         claimed: true,
-        containerId: container.id,
-        memoriesCreated: entries.length,
+        containerId: claimResult.containerId,
+        memoriesCreated: claimResult.memoriesCreated,
       },
       request_id: c.get("requestId"),
     });

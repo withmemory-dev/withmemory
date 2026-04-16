@@ -349,6 +349,10 @@ export const wmAuthCodes = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     email: text("email").notNull(),
     codeHash: text("code_hash").notNull(),
+    // Requesting IP — used to rate limit code requests per source so a single
+    // caller can't exhaust sending reputation by cycling email addresses.
+    // Nullable because older rows (pre-migration 0012) have no value.
+    ipAddress: text("ip_address"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     attempts: integer("attempts").notNull().default(0),
@@ -357,6 +361,7 @@ export const wmAuthCodes = pgTable(
   },
   (table) => ({
     emailCreatedIdx: index("wm_auth_codes_email_created_idx").on(table.email, table.createdAt),
+    ipCreatedIdx: index("wm_auth_codes_ip_created_idx").on(table.ipAddress, table.createdAt),
   })
 );
 
