@@ -108,9 +108,24 @@ export function containersRoute() {
         {
           error: {
             code: "container_limit_exceeded",
-            message: `Container limit reached (${current} / ${limit}). Upgrade to increase your limit.`,
+            message: `Container limit reached (${current} / ${limit}).`,
             request_id: c.get("requestId"),
-            details: { current, limit, plan_tier: account.planTier },
+            details: {
+              current,
+              limit,
+              plan_tier: account.planTier,
+              recovery_options: [
+                {
+                  action: "delete_containers",
+                  description: "Delete unused containers with memory.containers.delete()",
+                },
+                {
+                  action: "upgrade_plan",
+                  url: "https://app.withmemory.dev/settings/billing",
+                  description: "Upgrade your plan for a higher container limit",
+                },
+              ],
+            },
           },
         },
         403

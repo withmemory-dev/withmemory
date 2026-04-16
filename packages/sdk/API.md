@@ -108,6 +108,32 @@ try {
 | `timeout` | SDK | 0 | Request exceeded the configured timeout |
 | `network_error` | SDK | 0 | Fetch failed (DNS, connection refused, TLS, offline, etc.) |
 
+### Enriched error details
+
+`quota_exceeded` and `container_limit_exceeded` errors include actionable recovery information in `details`:
+
+```json
+{
+  "error": {
+    "code": "quota_exceeded",
+    "message": "Memory limit reached (100 / 100).",
+    "details": {
+      "current": 100,
+      "limit": 100,
+      "plan_tier": "pro",
+      "quota_scope": "parent_account",
+      "recovery_options": [
+        { "action": "remove_memories", "description": "Remove old memories with memory.list() + memory.remove() or memory.delete()" },
+        { "action": "supersede_duplicates", "description": "Dedup by re-adding with the same key" },
+        { "action": "upgrade_plan", "url": "https://app.withmemory.dev/settings/billing", "description": "Upgrade your plan for a higher memory limit" }
+      ]
+    }
+  }
+}
+```
+
+`quota_scope` is `"parent_account"` for top-level accounts or `"container"` for sub-accounts. Read endpoints (`list`, `get`, `recall`) are never blocked by quota — only writes (`add`) are gated, so the "list + remove" recovery path always works.
+
 ### Auto-retry
 
 The SDK automatically retries transient failures with exponential backoff and jitter. Retryable conditions:

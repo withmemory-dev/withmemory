@@ -26,7 +26,12 @@ export type { PlanTier };
  */
 export async function checkMemoryQuota(
   db: Database,
-  account: { id: string; memoryLimit: number; planTier: PlanTier; parentAccountId: string | null },
+  account: {
+    id: string;
+    memoryLimit: number;
+    planTier: PlanTier;
+    parentAccountId: string | null;
+  },
   additionalMemories: number = 1
 ): Promise<void> {
   // Resolve the parent account and its limit
@@ -52,6 +57,7 @@ export async function checkMemoryQuota(
         current: 0,
         limit: 0,
         planTier: account.planTier,
+        quotaScope: "container",
       });
     }
 
@@ -85,6 +91,7 @@ export async function checkMemoryQuota(
       current,
       limit,
       planTier,
+      quotaScope: account.parentAccountId ? "container" : "parent_account",
     });
   }
 }
@@ -132,11 +139,33 @@ export class PlanEnforcementError extends Error {
     current: number;
     limit: number;
     planTier: PlanTier;
+    quotaScope?: "parent_account" | "container";
   }): PlanEnforcementError {
     return new PlanEnforcementError(
       "quota_exceeded",
-      `Memory limit reached (${opts.current} / ${opts.limit}). Upgrade to increase your limit.`,
-      { current: opts.current, limit: opts.limit, plan_tier: opts.planTier }
+      `Memory limit reached (${opts.current} / ${opts.limit}).`,
+      {
+        current: opts.current,
+        limit: opts.limit,
+        plan_tier: opts.planTier,
+        quota_scope: opts.quotaScope ?? "parent_account",
+        recovery_options: [
+          {
+            action: "remove_memories",
+            description:
+              "Remove old memories with memory.list() + memory.remove() or memory.delete()",
+          },
+          {
+            action: "supersede_duplicates",
+            description: "Dedup by re-adding with the same key",
+          },
+          {
+            action: "upgrade_plan",
+            url: "https://app.withmemory.dev/settings/billing",
+            description: "Upgrade your plan for a higher memory limit",
+          },
+        ],
+      }
     );
   }
 
