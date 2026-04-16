@@ -77,7 +77,7 @@ export function authRoute() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            from: "WithMemory <noreply@withmemory.dev>",
+            from: "WithMemory <noreply@mail.reprom.run>",
             to: [normalizedEmail],
             subject: "Your WithMemory verification code",
             text: `Your verification code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you didn't request this, you can safely ignore this email.`,
