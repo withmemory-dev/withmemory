@@ -293,6 +293,53 @@ export const wmMemories = pgTable(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// wm_caches — ephemeral zero-auth key-value caches for bootstrap demo flow
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const wmCaches = pgTable(
+  "wm_caches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tokenHash: text("token_hash").notNull().unique(),
+    ipAddress: text("ip_address").notNull(),
+    ttlSeconds: integer("ttl_seconds").notNull().default(86400),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    claimTokenHash: text("claim_token_hash").notNull().unique(),
+    claimedByAccountId: uuid("claimed_by_account_id").references(() => wmAccounts.id),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    ipCreatedIdx: index("wm_caches_ip_created_idx").on(table.ipAddress, table.createdAt),
+    expiresAtIdx: index("wm_caches_expires_at_idx").on(table.expiresAt),
+  })
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// wm_cache_entries — key-value entries within an ephemeral cache
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const wmCacheEntries = pgTable(
+  "wm_cache_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    cacheId: uuid("cache_id")
+      .notNull()
+      .references(() => wmCaches.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    value: text("value").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => ({
+    uniqueCacheKey: unique().on(table.cacheId, table.key),
+  })
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Inferred TypeScript types — use these everywhere instead of redefining
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -316,3 +363,9 @@ export type NewWmUser = typeof wmUsers.$inferInsert;
 
 export type WmAccountMember = typeof wmAccountMembers.$inferSelect;
 export type NewWmAccountMember = typeof wmAccountMembers.$inferInsert;
+
+export type WmCache = typeof wmCaches.$inferSelect;
+export type NewWmCache = typeof wmCaches.$inferInsert;
+
+export type WmCacheEntry = typeof wmCacheEntries.$inferSelect;
+export type NewWmCacheEntry = typeof wmCacheEntries.$inferInsert;

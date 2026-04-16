@@ -1,4 +1,4 @@
-import type { WmAccount, WmApiKey } from "./db/schema";
+import type { WmAccount, WmApiKey, WmCache } from "./db/schema";
 import type { Database } from "./db/client";
 
 export type WorkerEnv = {
@@ -14,4 +14,5 @@ export type AppVariables = {
   apiKey: WmApiKey;
   requestId: string;
   clientId: string | null;
+  cache: WmCache;
 };

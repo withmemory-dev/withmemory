@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import type { WorkerEnv, AppVariables } from "./types";
 import { authMiddleware } from "./middleware/auth";
 import { v1Routes } from "./routes/v1";
+import { cacheRoute } from "./routes/v1/cache";
 
 const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
@@ -15,12 +16,24 @@ app.use("*", async (c, next) => {
   await next();
 });
 
-// /v1/* middleware: create db per-request from Worker bindings, then run auth
+// /v1/* middleware: create db per-request from Worker bindings
 app.use("/v1/*", async (c, next) => {
   const db = createDb(c.env.DATABASE_URL);
   c.set("db", db);
+  await next();
+});
+
+// Auth middleware for all /v1/* except cache routes — cache handles its own auth per-endpoint
+app.use("/v1/*", async (c, next) => {
+  if (c.req.path.startsWith("/v1/cache")) {
+    return next();
+  }
+  const db = c.get("db");
   return authMiddleware(db)(c, next);
 });
+
+// Cache routes mounted separately — mixed auth handled internally
+app.route("/v1", cacheRoute());
 
 app.route("/v1", v1Routes());
 
