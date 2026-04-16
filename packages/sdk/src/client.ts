@@ -1,4 +1,6 @@
 import { WithMemoryError, TimeoutError, NetworkError, createError } from "./errors";
+import { CacheInstance } from "./cache";
+import type { ScopedRequestFn } from "./cache";
 import type {
   WithMemoryConfig,
   AddParams,
@@ -28,6 +30,10 @@ import type {
   RevokeContainerKeyResponse,
   DeleteContainerOptions,
   DeleteContainerResponse,
+  CacheCreateOptions,
+  CacheCreateResponse,
+  CacheClaimOptions,
+  CacheClaimResponse,
 } from "./types";
 
 const DEFAULT_BASE_URL = "https://api.withmemory.dev";
@@ -239,6 +245,167 @@ export class WithMemoryClient {
       );
     },
   };
+
+  // ─── Cache namespace ──────────────────────────────────────────────────
+  readonly cache = {
+    create: async (
+      options?: CacheCreateOptions,
+      requestOptions?: RequestOptions
+    ): Promise<CacheInstance> => {
+      const body: Record<string, unknown> = {};
+      if (options?.ttlSeconds !== undefined) body.ttlSeconds = options.ttlSeconds;
+      const response = await this.requestWithToken<CacheCreateResponse>(
+        null,
+        "POST",
+        "/v1/cache",
+        body,
+        requestOptions
+      );
+      const { cache } = response;
+      const scopedFn = this.createScopedRequestFn(cache.rawToken);
+      return new CacheInstance({
+        id: cache.id,
+        rawToken: cache.rawToken,
+        claimToken: cache.claimToken,
+        claimUrl: cache.claimUrl,
+        expiresAt: cache.expiresAt,
+        requestFn: scopedFn,
+      });
+    },
+
+    claim: async (
+      options: CacheClaimOptions,
+      requestOptions?: RequestOptions
+    ): Promise<CacheClaimResponse> => {
+      return this.request<CacheClaimResponse>(
+        "POST",
+        "/v1/cache/claim",
+        options,
+        requestOptions
+      );
+    },
+  };
+
+  private createScopedRequestFn(token: string): ScopedRequestFn {
+    return <T>(
+      method: string,
+      path: string,
+      body?: unknown,
+      options?: RequestOptions
+    ): Promise<T> => {
+      return this.requestWithToken<T>(token, method, path, body, options);
+    };
+  }
+
+  private async requestWithToken<T>(
+    token: string | null,
+    method: string,
+    path: string,
+    body?: unknown,
+    options?: RequestOptions
+  ): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
+    const timeout = options?.timeout ?? this.timeout;
+    const maxRetries = options?.maxRetries ?? this.maxRetries;
+
+    let lastError: WithMemoryError | undefined;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) {
+        const delay = Math.min(500 * Math.pow(2, attempt - 1), 4000);
+        const jitter = Math.random() * 500;
+        await new Promise((resolve) => setTimeout(resolve, delay + jitter));
+      }
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeout);
+
+      if (options?.signal) {
+        if (options.signal.aborted) {
+          clearTimeout(timer);
+          throw new TimeoutError("Request aborted by caller");
+        }
+        options.signal.addEventListener("abort", () => controller.abort(), { once: true });
+      }
+
+      const headers: Record<string, string> = {
+        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(this.clientId ? { "X-WithMemory-Client": this.clientId } : {}),
+      };
+      if (token !== null) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          method,
+          headers,
+          body: body !== undefined ? JSON.stringify(body) : undefined,
+          signal: controller.signal,
+        });
+      } catch (err: unknown) {
+        clearTimeout(timer);
+        if (err instanceof DOMException && err.name === "AbortError") {
+          lastError = new TimeoutError(`Request to ${path} timed out after ${timeout}ms`);
+        } else {
+          const message = err instanceof Error ? err.message : "Network request failed";
+          lastError = new NetworkError(message);
+        }
+        if (attempt < maxRetries) continue;
+        throw lastError;
+      } finally {
+        clearTimeout(timer);
+      }
+
+      const requestId = response.headers.get("X-Request-Id") ?? undefined;
+
+      if (!response.ok) {
+        let errorBody: {
+          error?: { code?: string; message?: string; details?: unknown; request_id?: string };
+        };
+        try {
+          errorBody = (await response.json()) as typeof errorBody;
+        } catch {
+          lastError = new NetworkError(
+            `HTTP ${response.status}: Non-JSON error response from ${path}`,
+            { requestId }
+          );
+          if (RETRYABLE_STATUS_CODES.has(response.status) && attempt < maxRetries) continue;
+          throw lastError;
+        }
+
+        const code = errorBody.error?.code ?? "network_error";
+        const message = errorBody.error?.message ?? `HTTP ${response.status}`;
+        const details = errorBody.error?.details;
+        const rid = errorBody.error?.request_id ?? requestId;
+
+        lastError = createError(message, { status: response.status, code, details, requestId: rid });
+
+        if ((response.status === 429 || response.status === 503) && attempt < maxRetries) {
+          const retryAfter = response.headers.get("Retry-After");
+          if (retryAfter) {
+            const seconds = Number.parseInt(retryAfter, 10);
+            if (Number.isFinite(seconds) && seconds > 0 && seconds <= 60) {
+              await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+            }
+          }
+          continue;
+        }
+
+        if (RETRYABLE_STATUS_CODES.has(response.status) && attempt < maxRetries) continue;
+        throw lastError;
+      }
+
+      try {
+        return (await response.json()) as T;
+      } catch {
+        throw new NetworkError(`Invalid JSON in response body from ${path}`);
+      }
+    }
+
+    throw lastError ?? new NetworkError("Request failed after retries");
+  }
 
   private async request<T>(
     method: string,

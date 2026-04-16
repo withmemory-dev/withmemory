@@ -26,6 +26,10 @@ export class WithMemoryError extends Error {
   static ContainerLimitExceededError: typeof ContainerLimitExceededError;
   static ContainerNameExistsError: typeof ContainerNameExistsError;
   static ConfirmationRequiredError: typeof ConfirmationRequiredError;
+  static RateLimitedError: typeof RateLimitedError;
+  static CacheEntryLimitError: typeof CacheEntryLimitError;
+  static CacheExpiredError: typeof CacheExpiredError;
+  static AlreadyClaimedError: typeof AlreadyClaimedError;
   static TimeoutError: typeof TimeoutError;
   static NetworkError: typeof NetworkError;
 }
@@ -102,6 +106,34 @@ export class ContainerNameExistsError extends WithMemoryError {
   }
 }
 
+export class RateLimitedError extends WithMemoryError {
+  constructor(message: string, options: ErrorOptions) {
+    super(message, { ...options, code: "rate_limited" });
+    this.name = "RateLimitedError";
+  }
+}
+
+export class CacheEntryLimitError extends WithMemoryError {
+  constructor(message: string, options: ErrorOptions) {
+    super(message, { ...options, code: "cache_entry_limit" });
+    this.name = "CacheEntryLimitError";
+  }
+}
+
+export class CacheExpiredError extends WithMemoryError {
+  constructor(message: string, options: ErrorOptions) {
+    super(message, { ...options, code: "cache_expired" });
+    this.name = "CacheExpiredError";
+  }
+}
+
+export class AlreadyClaimedError extends WithMemoryError {
+  constructor(message: string, options: ErrorOptions) {
+    super(message, { ...options, code: "already_claimed" });
+    this.name = "AlreadyClaimedError";
+  }
+}
+
 export class TimeoutError extends WithMemoryError {
   constructor(message: string, options?: Omit<ErrorOptions, "status">) {
     super(message, { ...options, status: 0, code: "timeout" });
@@ -127,6 +159,10 @@ WithMemoryError.KeyExpiredError = KeyExpiredError;
 WithMemoryError.ContainerLimitExceededError = ContainerLimitExceededError;
 WithMemoryError.ContainerNameExistsError = ContainerNameExistsError;
 WithMemoryError.ConfirmationRequiredError = ConfirmationRequiredError;
+WithMemoryError.RateLimitedError = RateLimitedError;
+WithMemoryError.CacheEntryLimitError = CacheEntryLimitError;
+WithMemoryError.CacheExpiredError = CacheExpiredError;
+WithMemoryError.AlreadyClaimedError = AlreadyClaimedError;
 WithMemoryError.TimeoutError = TimeoutError;
 WithMemoryError.NetworkError = NetworkError;
 
@@ -160,6 +196,14 @@ export function createError(
       return new ConfirmationRequiredError(message, opts);
     case "extraction_failed":
       return new ExtractionFailedError(message, opts);
+    case "rate_limited":
+      return new RateLimitedError(message, opts);
+    case "cache_entry_limit":
+      return new CacheEntryLimitError(message, opts);
+    case "cache_expired":
+      return new CacheExpiredError(message, opts);
+    case "already_claimed":
+      return new AlreadyClaimedError(message, opts);
     default:
       return new WithMemoryError(message, options);
   }

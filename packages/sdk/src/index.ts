@@ -1,4 +1,5 @@
 export { WithMemoryClient, createClient } from "./client";
+export { CacheInstance } from "./cache";
 export {
   WithMemoryError,
   UnauthorizedError,
@@ -11,6 +12,10 @@ export {
   ContainerLimitExceededError,
   ContainerNameExistsError,
   ConfirmationRequiredError,
+  RateLimitedError,
+  CacheEntryLimitError,
+  CacheExpiredError,
+  AlreadyClaimedError,
   TimeoutError,
   NetworkError,
 } from "./errors";
@@ -45,9 +50,19 @@ export type {
   RevokeContainerKeyResponse,
   DeleteContainerOptions,
   DeleteContainerResponse,
+  CacheCreateOptions,
+  CacheCreateResponse,
+  CacheEntry,
+  CacheSetResponse,
+  CacheGetResponse,
+  CacheDeleteResponse,
+  CacheListEntry,
+  CacheListResponse,
+  CacheClaimOptions,
+  CacheClaimResponse,
 } from "./types";
 
-import { WithMemoryClient } from "./client";
+import { WithMemoryClient, createClient } from "./client";
 import type {
   WithMemoryConfig,
   RegisterDefaults,
@@ -57,6 +72,8 @@ import type {
   GetParams,
   RemoveParams,
   ListOptions,
+  CacheCreateOptions,
+  CacheClaimOptions,
 } from "./types";
 
 // ─── Default singleton ──────────────────────────────────────────────────────
@@ -127,5 +144,18 @@ export const memory = {
 
   get containers() {
     return getInstance().containers;
+  },
+
+  cache: {
+    create(options?: CacheCreateOptions, requestOptions?: RequestOptions) {
+      // cache.create is unauthenticated — works without configure()
+      const client =
+        instance ?? createClient({ apiKey: "", baseUrl: "https://api.withmemory.dev" });
+      return client.cache.create(options, requestOptions);
+    },
+    claim(options: CacheClaimOptions, requestOptions?: RequestOptions) {
+      // claim requires an API key — must call configure() first
+      return getInstance().cache.claim(options, requestOptions);
+    },
   },
 };

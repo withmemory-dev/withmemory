@@ -214,3 +214,66 @@ export interface DeleteContainerResponse {
   };
   request_id?: string;
 }
+
+// ─── Cache ──────────────────────────────────────────────────────────────
+
+export interface CacheCreateOptions {
+  ttlSeconds?: number;
+}
+
+export interface CacheCreateResponse {
+  cache: {
+    id: string;
+    rawToken: string;
+    claimToken: string;
+    claimUrl: string;
+    expiresAt: string;
+  };
+  request_id?: string;
+}
+
+export interface CacheEntry {
+  key: string;
+  value: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CacheSetResponse {
+  entry: CacheEntry;
+  request_id?: string;
+}
+
+export interface CacheGetResponse {
+  entry: CacheEntry | null;
+  request_id?: string;
+}
+
+export interface CacheDeleteResponse {
+  result: { deleted: boolean };
+  request_id?: string;
+}
+
+export interface CacheListEntry {
+  key: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CacheListResponse {
+  entries: CacheListEntry[];
+  request_id?: string;
+}
+
+export interface CacheClaimOptions {
+  claimToken: string;
+}
+
+export interface CacheClaimResponse {
+  result: {
+    claimed: boolean;
+    containerId: string;
+    memoriesCreated: number;
+  };
+  request_id?: string;
+}
