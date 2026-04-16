@@ -340,6 +340,27 @@ export const wmCacheEntries = pgTable(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// wm_auth_codes — email verification codes for agent-initiated signup
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const wmAuthCodes = pgTable(
+  "wm_auth_codes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    codeHash: text("code_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+  },
+  (table) => ({
+    emailCreatedIdx: index("wm_auth_codes_email_created_idx").on(table.email, table.createdAt),
+  })
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Inferred TypeScript types — use these everywhere instead of redefining
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -369,3 +390,6 @@ export type NewWmCache = typeof wmCaches.$inferInsert;
 
 export type WmCacheEntry = typeof wmCacheEntries.$inferSelect;
 export type NewWmCacheEntry = typeof wmCacheEntries.$inferInsert;
+
+export type WmAuthCode = typeof wmAuthCodes.$inferSelect;
+export type NewWmAuthCode = typeof wmAuthCodes.$inferInsert;

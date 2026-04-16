@@ -6,6 +6,7 @@ export type WorkerEnv = {
   OPENAI_API_KEY: string;
   EXTRACTION_PROMPT_VERSION: string;
   EXTRACTION_MAX_INPUT_BYTES: string;
+  RESEND_API_KEY: string;
 };
 
 export type AppVariables = {

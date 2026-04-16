@@ -5,6 +5,7 @@ import type { WorkerEnv, AppVariables } from "./types";
 import { authMiddleware } from "./middleware/auth";
 import { v1Routes } from "./routes/v1";
 import { cacheRoute } from "./routes/v1/cache";
+import { authRoute } from "./routes/v1/auth";
 
 const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
@@ -25,15 +26,16 @@ app.use("/v1/*", async (c, next) => {
 
 // Auth middleware for all /v1/* except cache routes — cache handles its own auth per-endpoint
 app.use("/v1/*", async (c, next) => {
-  if (c.req.path.startsWith("/v1/cache")) {
+  if (c.req.path.startsWith("/v1/cache") || c.req.path.startsWith("/v1/auth")) {
     return next();
   }
   const db = c.get("db");
   return authMiddleware(db)(c, next);
 });
 
-// Cache routes mounted separately — mixed auth handled internally
+// Unauthenticated routes — cache and auth handle their own auth per-endpoint
 app.route("/v1", cacheRoute());
+app.route("/v1", authRoute());
 
 app.route("/v1", v1Routes());
 
