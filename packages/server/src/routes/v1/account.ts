@@ -9,12 +9,14 @@ import { requirePlan, PlanEnforcementError } from "../../lib/plan-enforcement";
 
 const { wmAccounts } = schema;
 
-const SetPromptSchema = z.object({
-  prompt: z
-    .string()
-    .transform((s) => s.trim())
-    .pipe(z.string().min(1).max(32768)),
-});
+const SetPromptSchema = z
+  .object({
+    prompt: z
+      .string()
+      .transform((s) => s.trim())
+      .pipe(z.string().min(1).max(32768)),
+  })
+  .strict();
 
 const setPromptValidator = zValidator("json", SetPromptSchema, zodErrorHook);
 
@@ -44,7 +46,7 @@ export function accountRoute() {
       .set({ extractionPrompt: prompt })
       .where(eq(wmAccounts.id, account.id));
 
-    return c.json({ prompt, source: "custom", request_id: c.get("requestId") });
+    return c.json({ extractionPrompt: { prompt, source: "custom" }, request_id: c.get("requestId") });
   });
 
   // GET /account/extraction-prompt — read current prompt state
@@ -53,13 +55,12 @@ export function accountRoute() {
 
     if (account.extractionPrompt) {
       return c.json({
-        prompt: account.extractionPrompt,
-        source: "custom",
+        extractionPrompt: { prompt: account.extractionPrompt, source: "custom" },
         request_id: c.get("requestId"),
       });
     }
 
-    return c.json({ prompt: null, source: "default", request_id: c.get("requestId") });
+    return c.json({ extractionPrompt: { prompt: null, source: "default" }, request_id: c.get("requestId") });
   });
 
   // DELETE /account/extraction-prompt — reset to default
@@ -72,7 +73,7 @@ export function accountRoute() {
       .set({ extractionPrompt: null })
       .where(eq(wmAccounts.id, account.id));
 
-    return c.json({ reset: true, request_id: c.get("requestId") });
+    return c.json({ result: { reset: true }, request_id: c.get("requestId") });
   });
 
   return app;

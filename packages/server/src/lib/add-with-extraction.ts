@@ -21,8 +21,8 @@ interface AddWithExtractionOptions {
 
 interface AddedMemory {
   id: string;
-  forScope: string;
-  forKey: string | null;
+  scope: string;
+  key: string | null;
   value: string;
   source: "extracted";
   status: "ready" | "pending" | "failed";
@@ -66,8 +66,8 @@ export async function addWithExtraction(
 
       return rows.map((r) => ({
         id: r.id,
-        forScope: externalId,
-        forKey: null,
+        scope: externalId,
+        key: null,
         value: r.content,
         source: "extracted" as const,
         status: r.status as "ready" | "pending" | "failed",
@@ -184,8 +184,8 @@ export async function addWithExtraction(
 
       addedMemories.push({
         id: inserted.id,
-        forScope: externalId,
-        forKey: null,
+        scope: externalId,
+        key: null,
         value: inserted.content,
         source: "extracted",
         status: inserted.status as "ready" | "pending" | "failed",
@@ -236,8 +236,8 @@ export async function addWithExtraction(
 
     addedMemories.push({
       id: inserted.id,
-      forScope: externalId,
-      forKey: null,
+      scope: externalId,
+      key: null,
       value: inserted.content,
       source: "extracted",
       status: inserted.status as "ready" | "pending" | "failed",

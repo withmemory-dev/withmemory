@@ -15,13 +15,15 @@ const { wmEndUsers, wmMemories } = schema;
 // Request validation
 // ─────────────────────────────────────────────────────────────────────────────
 
-const RecallRequestSchema = z.object({
-  forScope: z.string().min(1).max(SCOPE_MAX_LENGTH),
-  query: z.string().min(1).max(8192),
-  maxItems: z.number().int().min(1).max(50).optional(),
-  maxTokens: z.number().int().min(10).max(2000).optional(),
-  defaults: z.record(z.string(), z.string()).optional(),
-});
+const RecallRequestSchema = z
+  .object({
+    scope: z.string().min(1).max(SCOPE_MAX_LENGTH),
+    query: z.string().min(1).max(8192),
+    maxItems: z.number().int().min(1).max(50).optional(),
+    maxTokens: z.number().int().min(10).max(2000).optional(),
+    defaults: z.record(z.string(), z.string()).optional(),
+  })
+  .strict();
 
 const validator = zValidator("json", RecallRequestSchema, zodErrorHook);
 
@@ -148,7 +150,7 @@ export function recallRoute() {
   app.post("/recall", validator, async (c) => {
     const db = c.get("db");
     const account = c.get("account");
-    const { forScope, query, maxItems, maxTokens, defaults } = c.req.valid("json");
+    const { scope, query, maxItems, maxTokens, defaults } = c.req.valid("json");
 
     const resolvedMaxItems = maxItems ?? 4;
     const resolvedMaxTokens = maxTokens ?? 150;
@@ -158,7 +160,7 @@ export function recallRoute() {
     const [endUser] = await db
       .select()
       .from(wmEndUsers)
-      .where(and(eq(wmEndUsers.accountId, account.id), eq(wmEndUsers.externalId, forScope)))
+      .where(and(eq(wmEndUsers.accountId, account.id), eq(wmEndUsers.externalId, scope)))
       .limit(1);
 
     // ─── Step 2: user_not_found early return ──────────────────────────────
@@ -338,8 +340,8 @@ export function recallRoute() {
       context,
       memories: keptRows.map((m) => ({
         id: m.id,
-        forScope,
-        forKey: keyMap.get(m.id) ?? null,
+        scope,
+        key: keyMap.get(m.id) ?? null,
         value: m.content,
         source: m.source,
         status: "ready" as const,

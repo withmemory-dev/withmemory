@@ -22,13 +22,13 @@ memory.configure({ apiKey: "wm_..." });
 // Store a fact
 await memory.add({
   value: "Prefers dark mode",
-  forKey: "ui_preference",
-  forScope: "user_123"
+  key: "ui_preference",
+  scope: "user_123"
 });
 
 // Recall context for an LLM call
 const { context } = await memory.recall({
-  forScope: "user_123",
+  scope: "user_123",
   query: "What does the user prefer?"
 });
 

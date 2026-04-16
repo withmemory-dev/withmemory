@@ -14,21 +14,23 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 // ─── List memories schema ────────────────────────────────────────────────────
 
-const listMemoriesSchema = z.object({
-  forScope: z.string().min(1).max(SCOPE_MAX_LENGTH).optional(),
-  source: z.enum(["explicit", "extracted", "all"]).optional().default("all"),
-  search: z.string().min(1).max(500).optional(),
-  createdAfter: z.string().datetime().optional(),
-  createdBefore: z.string().datetime().optional(),
-  orderBy: z
-    .enum(["updatedAt", "createdAt", "importance", "lastRecalledAt"])
-    .optional()
-    .default("updatedAt"),
-  orderDir: z.enum(["desc", "asc"]).optional().default("desc"),
-  limit: z.number().int().min(1).max(200).optional().default(50),
-  cursor: z.string().optional(),
-  includeTotal: z.boolean().optional().default(false),
-});
+const listMemoriesSchema = z
+  .object({
+    scope: z.string().min(1).max(SCOPE_MAX_LENGTH).optional(),
+    source: z.enum(["explicit", "extracted", "all"]).optional().default("all"),
+    search: z.string().min(1).max(500).optional(),
+    createdAfter: z.string().datetime().optional(),
+    createdBefore: z.string().datetime().optional(),
+    orderBy: z
+      .enum(["updatedAt", "createdAt", "importance", "lastRecalledAt"])
+      .optional()
+      .default("updatedAt"),
+    orderDir: z.enum(["desc", "asc"]).optional().default("desc"),
+    limit: z.number().int().min(1).max(200).optional().default(50),
+    cursor: z.string().optional(),
+    includeTotal: z.boolean().optional().default(false),
+  })
+  .strict();
 
 const listValidator = zValidator("json", listMemoriesSchema, zodErrorHook);
 
@@ -90,7 +92,7 @@ export function memoriesRoute() {
     const db = c.get("db");
     const account = c.get("account");
     const {
-      forScope,
+      scope,
       source,
       search,
       createdAfter,
@@ -102,10 +104,10 @@ export function memoriesRoute() {
       includeTotal,
     } = c.req.valid("json");
 
-    // ── Resolve optional forScope to end_user_id ─────────────────────────
+    // ── Resolve optional scope to end_user_id ──────────────────────────
     let endUserId: string | undefined;
-    if (forScope) {
-      const endUser = await findEndUser(db, account.id, forScope);
+    if (scope) {
+      const endUser = await findEndUser(db, account.id, scope);
       if (!endUser) {
         return c.json({
           memories: [],
@@ -244,8 +246,8 @@ export function memoriesRoute() {
     // ── Map to Memory response shape (explicit column projection) ────────
     const memories = pageRows.map((r) => ({
       id: r.id,
-      forScope: r.externalUserId,
-      forKey: r.key,
+      scope: r.externalUserId,
+      key: r.key,
       value: r.content,
       source: r.source as "explicit" | "extracted",
       status: r.status,
@@ -286,7 +288,7 @@ export function memoriesRoute() {
       .where(and(eq(wmMemories.id, memoryId), eq(wmMemories.accountId, account.id)))
       .returning({ id: wmMemories.id });
 
-    return c.json({ deleted: result.length > 0, request_id: c.get("requestId") });
+    return c.json({ result: { deleted: result.length > 0 }, request_id: c.get("requestId") });
   });
 
   return app;

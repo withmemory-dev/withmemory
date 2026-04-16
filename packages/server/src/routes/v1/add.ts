@@ -13,11 +13,13 @@ import EXTRACTION_PROMPT from "../../lib/extraction-prompt.txt";
 
 const { wmMemories } = schema;
 
-const AddRequestSchema = z.object({
-  forScope: z.string().min(1).max(SCOPE_MAX_LENGTH),
-  forKey: z.string().min(1).max(128).optional(),
-  value: z.string().min(1).max(16384),
-});
+const AddRequestSchema = z
+  .object({
+    scope: z.string().min(1).max(SCOPE_MAX_LENGTH),
+    key: z.string().min(1).max(128).optional(),
+    value: z.string().min(1).max(16384),
+  })
+  .strict();
 
 const validator = zValidator("json", AddRequestSchema, zodErrorHook);
 
@@ -27,7 +29,7 @@ export function addRoute() {
   app.post("/memories", validator, async (c) => {
     const db = c.get("db");
     const account = c.get("account");
-    const { forScope, forKey, value } = c.req.valid("json");
+    const { scope, key, value } = c.req.valid("json");
 
     // Quota check: reject before any DB write or API call
     try {
@@ -41,9 +43,9 @@ export function addRoute() {
       throw e;
     }
 
-    const endUser = await ensureEndUser(db, account.id, forScope);
+    const endUser = await ensureEndUser(db, account.id, scope);
 
-    if (forKey !== undefined) {
+    if (key !== undefined) {
       // Explicit path: direct write, no extraction
       let embedding: number[] | null = null;
       const apiKey = c.env.OPENAI_API_KEY;
@@ -53,7 +55,7 @@ export function addRoute() {
           embedding = results[0] ?? null;
         } catch (err) {
           console.warn(
-            `add: embedding failed for forKey="${forKey}" (account=${account.id}): ${
+            `add: embedding failed for key="${key}" (account=${account.id}): ${
               err instanceof Error ? err.message : "unknown error"
             }`
           );
@@ -65,7 +67,7 @@ export function addRoute() {
         .values({
           accountId: account.id,
           endUserId: endUser.id,
-          key: forKey,
+          key,
           content: value,
           source: "explicit",
           embedding,
@@ -84,8 +86,8 @@ export function addRoute() {
         memories: [
           {
             id: memory.id,
-            forScope,
-            forKey: memory.key!,
+            scope,
+            key: memory.key!,
             value: memory.content,
             source: memory.source,
             status: memory.status,
@@ -133,7 +135,7 @@ export function addRoute() {
             promptVersion,
             idempotencyKey,
           },
-          forScope
+          scope
         );
         return c.json({ memories, request_id: c.get("requestId") });
       } catch (err) {

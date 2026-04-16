@@ -9,10 +9,12 @@ import type { WorkerEnv, AppVariables } from "../../types";
 
 const { wmMemories } = schema;
 
-const RemoveRequestSchema = z.object({
-  forScope: z.string().min(1).max(SCOPE_MAX_LENGTH),
-  forKey: z.string().min(1).max(128),
-});
+const RemoveRequestSchema = z
+  .object({
+    scope: z.string().min(1).max(SCOPE_MAX_LENGTH),
+    key: z.string().min(1).max(128),
+  })
+  .strict();
 
 const validator = zValidator("json", RemoveRequestSchema, zodErrorHook);
 
@@ -22,26 +24,26 @@ export function removeRoute() {
   app.post("/memories/remove", validator, async (c) => {
     const db = c.get("db");
     const account = c.get("account");
-    const { forScope, forKey } = c.req.valid("json");
+    const { scope, key } = c.req.valid("json");
 
-    const endUser = await findEndUser(db, account.id, forScope);
+    const endUser = await findEndUser(db, account.id, scope);
 
     if (!endUser) {
-      return c.json({ deleted: false, request_id: c.get("requestId") });
+      return c.json({ result: { deleted: false }, request_id: c.get("requestId") });
     }
 
-    const result = await db
+    const deleted = await db
       .delete(wmMemories)
       .where(
         and(
           eq(wmMemories.accountId, account.id),
           eq(wmMemories.endUserId, endUser.id),
-          eq(wmMemories.key, forKey)
+          eq(wmMemories.key, key)
         )
       )
       .returning({ id: wmMemories.id });
 
-    return c.json({ deleted: result.length > 0, request_id: c.get("requestId") });
+    return c.json({ result: { deleted: deleted.length > 0 }, request_id: c.get("requestId") });
   });
 
   return app;

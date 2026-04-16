@@ -62,7 +62,7 @@ import type {
 // Usage:
 //   import { memory } from '@withmemory/sdk';
 //   memory.configure({ apiKey: 'wm_...' });
-//   await memory.add({ value: 'Alice', forKey: 'name', forScope: 'user_1' });
+//   await memory.add({ value: 'Alice', key: 'name', scope: 'user_1' });
 
 let instance: WithMemoryClient | null = null;
 
@@ -104,8 +104,8 @@ export const memory = {
     return getInstance().list(options, requestOptions);
   },
 
-  deleteMemory(memoryId: string, options?: RequestOptions) {
-    return getInstance().deleteMemory(memoryId, options);
+  delete(memoryId: string, options?: RequestOptions) {
+    return getInstance().delete(memoryId, options);
   },
 
   health(options?: RequestOptions) {

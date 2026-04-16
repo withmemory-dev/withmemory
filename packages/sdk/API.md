@@ -11,12 +11,12 @@ memory.configure({ apiKey: "wm_..." });
 
 await memory.add({
   value: "Andrew",
-  forKey: "name",
-  forScope: "user_alice"
+  key: "name",
+  scope: "user_alice"
 });
 
 const { context } = await memory.recall({
-  forScope: "user_alice",
+  scope: "user_alice",
   query: "What's the user's name?"
 });
 
@@ -36,7 +36,7 @@ Initial public API.
 
 ## Route conventions
 
-All `/v1/*` routes are POST with JSON bodies, except DELETE on resources addressed by primary key (e.g., `DELETE /v1/memories/:id`) and GET for read-only status endpoints (e.g., `GET /v1/health`). The `forScope` field is a filter within the account's data, not an addressable resource — it lives in the request body, never in the URL path or query string.
+All `/v1/*` routes are POST with JSON bodies, except DELETE on resources addressed by primary key (e.g., `DELETE /v1/memories/:id`) and GET for read-only status endpoints (e.g., `GET /v1/health`). The `scope` field is a filter within the account's data, not an addressable resource — it lives in the request body, never in the URL path or query string.
 
 ## Error handling
 
@@ -63,7 +63,7 @@ Each error code maps to a named subclass. Both patterns work:
 import { WithMemoryError, UnauthorizedError } from '@withmemory/sdk';
 
 try {
-  await memory.add({ forScope: 'alice', value: '...' });
+  await memory.add({ scope: 'alice', value: '...' });
 } catch (err) {
   // Pattern 1: direct import
   if (err instanceof UnauthorizedError) { /* ... */ }
@@ -124,12 +124,12 @@ The `Retry-After` header is respected on 429 and 503 responses.
 const client = createClient({ apiKey: 'wm_...', maxRetries: 5 });
 
 // Per-request override
-await memory.add({ forScope: 'alice', value: '...' }, { maxRetries: 0 });
+await memory.add({ scope: 'alice', value: '...' }, { maxRetries: 0 });
 ```
 
 Default: 3 retries. Set `maxRetries: 0` to disable retries for a specific call.
 
-**Idempotency note:** when using auto-retry on the extraction path (add without `forKey`), pass an `Idempotency-Key` header via request options to avoid duplicate extraction writes on retry.
+**Idempotency note:** when using auto-retry on the extraction path (add without `key`), pass an `Idempotency-Key` header via request options to avoid duplicate extraction writes on retry.
 
 ### Timeouts
 
@@ -137,7 +137,7 @@ Default timeout: 60 seconds. Configurable at the client level and per-request:
 
 ```ts
 const client = createClient({ apiKey: 'wm_...', timeout: 30000 });
-await memory.add({ forScope: 'alice', value: '...' }, { timeout: 10000 });
+await memory.add({ scope: 'alice', value: '...' }, { timeout: 10000 });
 ```
 
 Each retry attempt gets its own fresh timeout. A timeout on one attempt does not consume all retries.
@@ -169,8 +169,8 @@ The canonical memory object returned by `add`, `get`, `recall`, and list operati
 ```ts
 interface Memory {
   id: string;
-  forScope: string;
-  forKey: string | null;   // null for extracted memories (source: "extracted")
+  scope: string;
+  key: string | null;    // null for extracted memories (source: "extracted")
   value: string;           // the memory content — named "value" in the SDK, "content" in the DB
   source: "explicit" | "extracted";
   status: "ready" | "pending" | "failed";
@@ -189,7 +189,7 @@ interface AddResponse {
 }
 ```
 
-Explicit mode (`forKey` provided) always returns an array of length 1. Extraction mode (`forKey` omitted) may return 0, 1, or several memories depending on what the extraction identifies.
+Explicit mode (`key` provided) always returns an array of length 1. Extraction mode (`key` omitted) may return 0, 1, or several memories depending on what the extraction identifies.
 
 ### RecallResponse
 
@@ -209,21 +209,21 @@ The `ranking` field describes how the returned memories were ordered:
 
 - **`"semantic"`** — memories were ranked by cosine similarity against an embedding of the query, combined with recency decay, importance, and source tier.
 - **`"recency_importance"`** — the query embedding could not be generated, so memories were ranked by recency and importance only. The `reason` field is `"embedding_unavailable"`.
-- **`"user_not_found"`** — the requested `forScope` does not exist under the authenticated account. The `memories` array is empty. The `context` may still contain registered defaults.
+- **`"user_not_found"`** — the requested `scope` does not exist under the authenticated account. The `memories` array is empty. The `context` may still contain registered defaults.
 
 ### GetResponse / RemoveResponse / HealthResponse
 
 ```ts
 interface GetResponse { memory: Memory | null; request_id?: string; }
-interface RemoveResponse { deleted: boolean; request_id?: string; }
-interface HealthResponse { status: "ok"; version: string; request_id?: string; }
+interface RemoveResponse { result: { deleted: boolean }; request_id?: string; }
+interface HealthResponse { health: { status: "ok"; version: string }; request_id?: string; }
 ```
 
 ### ListOptions / ListResponse
 
 ```ts
 interface ListOptions {
-  forScope?: string;         // Filter by scope. Omit for account-wide listing.
+  scope?: string;            // Filter by scope. Omit for account-wide listing.
   source?: "explicit" | "extracted" | "all";
   search?: string;           // Case-insensitive substring match (1-500 chars)
   createdAfter?: string;     // ISO 8601
@@ -247,13 +247,17 @@ interface ListResponse {
 
 ```ts
 interface ExtractionPromptResponse {
-  prompt: string | null;
-  source: "custom" | "default";
+  extractionPrompt: {
+    prompt: string | null;
+    source: "custom" | "default";
+  };
   request_id?: string;
 }
 
 interface ResetExtractionPromptResponse {
-  reset: boolean;
+  result: {
+    reset: boolean;
+  };
   request_id?: string;
 }
 ```
@@ -264,12 +268,12 @@ interface ResetExtractionPromptResponse {
 |--------|------|---------|-------------------|
 | `configure(config)` | — | `void` | Yes |
 | `register(defaults)` | — | `void` | Yes |
-| `add({ forScope, forKey?, value })` | `POST /v1/memories` | `AddResponse` | Yes |
-| `get({ forScope, forKey })` | `POST /v1/memories/get` | `GetResponse` | Yes |
-| `recall({ forScope, query, ... })` | `POST /v1/recall` | `RecallResponse` | Yes |
-| `remove({ forScope, forKey })` | `POST /v1/memories/remove` | `RemoveResponse` | Yes |
+| `add({ scope, key?, value })` | `POST /v1/memories` | `AddResponse` | Yes |
+| `get({ scope, key })` | `POST /v1/memories/get` | `GetResponse` | Yes |
+| `recall({ scope, query, ... })` | `POST /v1/recall` | `RecallResponse` | Yes |
+| `remove({ scope, key })` | `POST /v1/memories/remove` | `RemoveResponse` | Yes |
 | `list(options?)` | `POST /v1/memories/list` | `ListResponse` | Yes |
-| `deleteMemory(memoryId)` | `DELETE /v1/memories/:id` | `RemoveResponse` | Yes |
+| `delete(memoryId)` | `DELETE /v1/memories/:id` | `RemoveResponse` | Yes |
 | `health()` | `GET /v1/health` | `HealthResponse` | Yes |
 | `setExtractionPrompt(prompt)` | `POST /v1/account/extraction-prompt` | `ExtractionPromptResponse` | Yes |
 | `getExtractionPrompt()` | `GET /v1/account/extraction-prompt` | `ExtractionPromptResponse` | Yes |
@@ -277,17 +281,17 @@ interface ResetExtractionPromptResponse {
 
 ### memory.add
 
-`memory.add` is the primary method for storing memories. It has two modes based on whether `forKey` is provided:
+`memory.add` is the primary method for storing memories. It has two modes based on whether `key` is provided:
 
 **Explicit mode — direct write:**
 ```ts
-await memory.add({ forScope: "alice", forKey: "name", value: "Andrew" });
+await memory.add({ scope: "alice", key: "name", value: "Andrew" });
 ```
 Writes the value directly under the given key. No LLM call. Returns the written memory in a single-element array.
 
 **Extraction mode — LLM-derived facts:**
 ```ts
-await memory.add({ forScope: "alice", value: "The user's name is Andrew and they prefer dark mode" });
+await memory.add({ scope: "alice", value: "The user's name is Andrew and they prefer dark mode" });
 ```
 Runs LLM extraction on the value and stores any facts the extraction identifies. The method is synchronous — it waits for extraction and embedding to complete before returning. Returns all extracted memories (may be zero if extraction identifies no durable facts).
 
@@ -299,7 +303,7 @@ The extraction path respects the account's custom extraction prompt if one is se
 
 **`recall()` accepts optional `defaults`** — a `Record<string, string>` of key-value pairs to include in the context when real memories don't fill the budget. Per-call defaults merge with (and override) any defaults set via `register()`. Only memories with `status: "ready"` are returned.
 
-**`list(options?)`** lists non-superseded memories with optional filtering, search, sort, and cursor-based pagination. Supports account-wide listing (omit `forScope`) or per-scope listing (provide `forScope`). Cursors are opaque strings using keyset pagination internally.
+**`list(options?)`** lists non-superseded memories with optional filtering, search, sort, and cursor-based pagination. Supports account-wide listing (omit `scope`) or per-scope listing (provide `scope`). Cursors are opaque strings using keyset pagination internally.
 
 ## Containers
 
@@ -321,12 +325,16 @@ All methods are namespaced under `containers`:
 
 | Method | HTTP | Returns | Throws on error? |
 |--------|------|---------|-------------------|
-| `containers.create({ name, metadata? })` | `POST /v1/containers` | `CreateContainerResponse` | Yes |
-| `containers.createKey({ forContainer, issuedTo, scopes?, expiresIn? })` | `POST /v1/containers/:id/keys` | `CreateContainerKeyResponse` | Yes |
-| `containers.list()` | `GET /v1/containers` | `ListContainersResponse` | Yes |
-| `containers.get({ forContainer })` | `GET /v1/containers/:id` | `GetContainerResponse` | Yes |
-| `containers.revokeKey({ forContainer, forKey })` | `DELETE /v1/containers/:id/keys/:keyId` | `RevokeContainerKeyResponse` | Yes |
-| `containers.delete({ forContainer, confirm: true })` | `DELETE /v1/containers/:id` | `DeleteContainerResponse` | Yes |
+| `containers.create({ name, metadata? })` | `POST /v1/containers` | `Container` | Yes |
+| `containers.createKey({ containerId, issuedTo, scopes?, expiresIn? })` | `POST /v1/containers/:id/keys` | `CreateContainerKeyResponse` | Yes |
+| `containers.list()` | `GET /v1/containers` | `Container[]` | Yes |
+| `containers.get({ containerId })` | `GET /v1/containers/:id` | `Container` | Yes |
+| `containers.revokeKey({ containerId, keyId })` | `DELETE /v1/containers/:id/keys/:keyId` | `RevokeContainerKeyResponse` | Yes |
+| `containers.delete({ containerId, confirm: true })` | `DELETE /v1/containers/:id` | `DeleteContainerResponse` | Yes |
+
+**SDK vs HTTP divergence:** `containers.create()`, `containers.list()`, and `containers.get()` return unwrapped `Container` / `Container[]` directly. The HTTP response includes an envelope (`{ container: {...} }` / `{ containers: [...] }`), but the SDK unwraps it for ergonomics.
+
+**`scopes` accepts `string | string[]`:** When creating a container key, you can pass scopes as a comma-separated string (`"memory:read,memory:write"`) or as an array of strings (`["memory:read", "memory:write"]`). The SDK normalizes arrays to comma-separated strings before sending.
 
 ### Container / ContainerKey types
 
@@ -359,7 +367,7 @@ interface ContainerKey {
 | Scope | Grants |
 |-------|--------|
 | `memory:read` | `get`, `recall`, `list`, `health` |
-| `memory:write` | `add`, `remove`, `deleteMemory` |
+| `memory:write` | `add`, `remove`, `delete` |
 | `account:admin` | Container management endpoints, extraction prompt CRUD |
 
 ### Key expiry

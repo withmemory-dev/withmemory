@@ -9,10 +9,12 @@ import type { WorkerEnv, AppVariables } from "../../types";
 
 const { wmMemories } = schema;
 
-const GetRequestSchema = z.object({
-  forScope: z.string().min(1).max(SCOPE_MAX_LENGTH),
-  forKey: z.string().min(1).max(128),
-});
+const GetRequestSchema = z
+  .object({
+    scope: z.string().min(1).max(SCOPE_MAX_LENGTH),
+    key: z.string().min(1).max(128),
+  })
+  .strict();
 
 const validator = zValidator("json", GetRequestSchema, zodErrorHook);
 
@@ -22,9 +24,9 @@ export function getRoute() {
   app.post("/memories/get", validator, async (c) => {
     const db = c.get("db");
     const account = c.get("account");
-    const { forScope, forKey } = c.req.valid("json");
+    const { scope, key } = c.req.valid("json");
 
-    const endUser = await findEndUser(db, account.id, forScope);
+    const endUser = await findEndUser(db, account.id, scope);
 
     if (!endUser) {
       return c.json({ memory: null, request_id: c.get("requestId") });
@@ -37,7 +39,7 @@ export function getRoute() {
         and(
           eq(wmMemories.accountId, account.id),
           eq(wmMemories.endUserId, endUser.id),
-          eq(wmMemories.key, forKey),
+          eq(wmMemories.key, key),
           isNull(wmMemories.supersededBy)
         )
       )
@@ -50,8 +52,8 @@ export function getRoute() {
     return c.json({
       memory: {
         id: memory.id,
-        forScope,
-        forKey: memory.key,
+        scope,
+        key: memory.key,
         value: memory.content,
         source: memory.source,
         status: memory.status,

@@ -16,6 +16,7 @@ import type {
   ListOptions,
   ListResponse,
   RequestOptions,
+  Container,
   CreateContainerOptions,
   CreateContainerResponse,
   CreateContainerKeyOptions,
@@ -55,10 +56,10 @@ export class WithMemoryClient {
 
   async add(params: AddParams, options?: RequestOptions): Promise<AddResponse> {
     const body: Record<string, unknown> = {
-      forScope: params.forScope,
+      scope: params.scope,
       value: params.value,
     };
-    if (params.forKey !== undefined) body.forKey = params.forKey;
+    if (params.key !== undefined) body.key = params.key;
     return this.request<AddResponse>("POST", "/v1/memories", body, options);
   }
 
@@ -67,8 +68,8 @@ export class WithMemoryClient {
       "POST",
       "/v1/memories/get",
       {
-        forScope: params.forScope,
-        forKey: params.forKey,
+        scope: params.scope,
+        key: params.key,
       },
       options
     );
@@ -80,7 +81,7 @@ export class WithMemoryClient {
       ...(options.defaults ?? {}),
     };
     const body: Record<string, unknown> = {
-      forScope: options.forScope,
+      scope: options.scope,
       query: options.query,
     };
     if (options.maxItems !== undefined) body.maxItems = options.maxItems;
@@ -94,8 +95,8 @@ export class WithMemoryClient {
       "POST",
       "/v1/memories/remove",
       {
-        forScope: params.forScope,
-        forKey: params.forKey,
+        scope: params.scope,
+        key: params.key,
       },
       options
     );
@@ -104,7 +105,7 @@ export class WithMemoryClient {
   async list(options?: ListOptions, requestOptions?: RequestOptions): Promise<ListResponse> {
     const body: Record<string, unknown> = {};
     if (options) {
-      if (options.forScope !== undefined) body.forScope = options.forScope;
+      if (options.scope !== undefined) body.scope = options.scope;
       if (options.source !== undefined) body.source = options.source;
       if (options.search !== undefined) body.search = options.search;
       if (options.createdAfter !== undefined) body.createdAfter = options.createdAfter;
@@ -118,7 +119,7 @@ export class WithMemoryClient {
     return this.request<ListResponse>("POST", "/v1/memories/list", body, requestOptions);
   }
 
-  async deleteMemory(memoryId: string, options?: RequestOptions): Promise<RemoveResponse> {
+  async delete(memoryId: string, options?: RequestOptions): Promise<RemoveResponse> {
     return this.request<RemoveResponse>("DELETE", `/v1/memories/${memoryId}`, undefined, options);
   }
 
@@ -158,50 +159,58 @@ export class WithMemoryClient {
 
   // ─── Containers namespace ────────────────────────────────────────────────
   readonly containers = {
-    create: (
+    create: async (
       options: CreateContainerOptions,
       requestOptions?: RequestOptions
-    ): Promise<CreateContainerResponse> => {
-      return this.request<CreateContainerResponse>(
+    ): Promise<Container> => {
+      const response = await this.request<CreateContainerResponse>(
         "POST",
         "/v1/containers",
         options,
         requestOptions
       );
+      return response.container;
     },
 
     createKey: (
       options: CreateContainerKeyOptions,
       requestOptions?: RequestOptions
     ): Promise<CreateContainerKeyResponse> => {
-      const { forContainer, ...body } = options;
+      const { containerId, scopes, ...rest } = options;
+      const normalizedScopes = Array.isArray(scopes)
+        ? scopes.map((s) => s.trim()).join(",")
+        : scopes;
+      const body: Record<string, unknown> = { ...rest };
+      if (normalizedScopes !== undefined) body.scopes = normalizedScopes;
       return this.request<CreateContainerKeyResponse>(
         "POST",
-        `/v1/containers/${forContainer}/keys`,
+        `/v1/containers/${containerId}/keys`,
         body,
         requestOptions
       );
     },
 
-    list: (requestOptions?: RequestOptions): Promise<ListContainersResponse> => {
-      return this.request<ListContainersResponse>(
+    list: async (requestOptions?: RequestOptions): Promise<Container[]> => {
+      const response = await this.request<ListContainersResponse>(
         "GET",
         "/v1/containers",
         undefined,
         requestOptions
       );
+      return response.containers;
     },
 
-    get: (
+    get: async (
       options: GetContainerOptions,
       requestOptions?: RequestOptions
-    ): Promise<GetContainerResponse> => {
-      return this.request<GetContainerResponse>(
+    ): Promise<Container> => {
+      const response = await this.request<GetContainerResponse>(
         "GET",
-        `/v1/containers/${options.forContainer}`,
+        `/v1/containers/${options.containerId}`,
         undefined,
         requestOptions
       );
+      return response.container;
     },
 
     revokeKey: (
@@ -210,7 +219,7 @@ export class WithMemoryClient {
     ): Promise<RevokeContainerKeyResponse> => {
       return this.request<RevokeContainerKeyResponse>(
         "DELETE",
-        `/v1/containers/${options.forContainer}/keys/${options.forKey}`,
+        `/v1/containers/${options.containerId}/keys/${options.keyId}`,
         undefined,
         requestOptions
       );
@@ -222,7 +231,7 @@ export class WithMemoryClient {
     ): Promise<DeleteContainerResponse> => {
       return this.request<DeleteContainerResponse>(
         "DELETE",
-        `/v1/containers/${options.forContainer}`,
+        `/v1/containers/${options.containerId}`,
         { confirm: options.confirm },
         requestOptions
       );

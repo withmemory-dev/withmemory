@@ -49,20 +49,26 @@ function requireAdminScope(c: {
 }
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────
-const CreateContainerSchema = z.object({
-  name: z.string().min(1).max(255),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-});
+const CreateContainerSchema = z
+  .object({
+    name: z.string().min(1).max(255),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
 
-const CreateKeySchema = z.object({
-  issuedTo: z.string().min(1).max(255),
-  scopes: z.string().optional(),
-  expiresIn: z.number().int().min(1).max(31536000).optional(),
-});
+const CreateKeySchema = z
+  .object({
+    issuedTo: z.string().min(1).max(255),
+    scopes: z.string().optional(),
+    expiresIn: z.number().int().min(1).max(31536000).optional(),
+  })
+  .strict();
 
-const DeleteContainerSchema = z.object({
-  confirm: z.literal(true),
-});
+const DeleteContainerSchema = z
+  .object({
+    confirm: z.literal(true),
+  })
+  .strict();
 
 // ─── Route factory ──────────────────────────────────────────────────────────
 
@@ -129,7 +135,7 @@ export function containersRoute() {
 
     return c.json(
       {
-        account: {
+        container: {
           id: container.id,
           parentAccountId: container.parentAccountId,
           name: container.name,
@@ -281,7 +287,7 @@ export function containersRoute() {
       .where(eq(wmAccounts.parentAccountId, account.id));
 
     return c.json({
-      accounts: containers.map((ct) => ({
+      containers: containers.map((ct) => ({
         id: ct.id,
         parentAccountId: ct.parentAccountId,
         name: ct.name,
@@ -345,7 +351,7 @@ export function containersRoute() {
     ]);
 
     return c.json({
-      account: {
+      container: {
         id: container.id,
         parentAccountId: container.parentAccountId,
         name: container.name,
@@ -392,7 +398,7 @@ export function containersRoute() {
     const now = new Date();
     await db.update(wmApiKeys).set({ revokedAt: now }).where(eq(wmApiKeys.id, keyId));
 
-    return c.json({ revoked: true, revokedAt: now.toISOString(), request_id: c.get("requestId") });
+    return c.json({ result: { revoked: true, revokedAt: now.toISOString() }, request_id: c.get("requestId") });
   });
 
   // ─── DELETE /containers/:id — delete a container ──────────────────────
@@ -429,7 +435,7 @@ export function containersRoute() {
       // FK CASCADE handles memories, end users, keys
       await db.delete(wmAccounts).where(eq(wmAccounts.id, containerId));
 
-      return c.json({ deleted: true, request_id: c.get("requestId") });
+      return c.json({ result: { deleted: true }, request_id: c.get("requestId") });
     }
   );
 

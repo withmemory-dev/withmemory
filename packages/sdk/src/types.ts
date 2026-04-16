@@ -18,8 +18,8 @@ export interface RequestOptions {
 
 export interface Memory {
   id: string;
-  forScope: string;
-  forKey: string | null;
+  scope: string;
+  key: string | null;
   value: string;
   source: "explicit" | "extracted";
   status: "ready" | "pending" | "failed";
@@ -29,8 +29,8 @@ export interface Memory {
 }
 
 export interface AddParams {
-  forScope: string;
-  forKey?: string;
+  scope: string;
+  key?: string;
   value: string;
 }
 
@@ -40,8 +40,8 @@ export interface AddResponse {
 }
 
 export interface GetParams {
-  forScope: string;
-  forKey: string;
+  scope: string;
+  key: string;
 }
 
 export interface GetResponse {
@@ -50,8 +50,8 @@ export interface GetResponse {
 }
 
 export interface RemoveParams {
-  forScope: string;
-  forKey: string;
+  scope: string;
+  key: string;
 }
 
 export interface RecallResponse {
@@ -65,29 +65,37 @@ export interface RecallResponse {
 }
 
 export interface ExtractionPromptResponse {
-  prompt: string | null;
-  source: "custom" | "default";
+  extractionPrompt: {
+    prompt: string | null;
+    source: "custom" | "default";
+  };
   request_id?: string;
 }
 
 export interface ResetExtractionPromptResponse {
-  reset: boolean;
+  result: {
+    reset: boolean;
+  };
   request_id?: string;
 }
 
 export interface RemoveResponse {
-  deleted: boolean;
+  result: {
+    deleted: boolean;
+  };
   request_id?: string;
 }
 
 export interface HealthResponse {
-  status: "ok";
-  version: string;
+  health: {
+    status: "ok";
+    version: string;
+  };
   request_id?: string;
 }
 
 export interface RecallOptions {
-  forScope: string;
+  scope: string;
   query: string;
   maxItems?: number;
   maxTokens?: number;
@@ -99,7 +107,7 @@ export interface RegisterDefaults {
 }
 
 export interface ListOptions {
-  forScope?: string;
+  scope?: string;
   source?: "explicit" | "extracted" | "all";
   search?: string;
   createdAfter?: string;
@@ -148,14 +156,14 @@ export interface CreateContainerOptions {
 }
 
 export interface CreateContainerKeyOptions {
-  forContainer: string;
+  containerId: string;
   issuedTo: string;
-  scopes?: string;
+  scopes?: string | string[];
   expiresIn?: number;
 }
 
 export interface CreateContainerResponse {
-  account: Container;
+  container: Container;
   request_id?: string;
 }
 
@@ -166,37 +174,41 @@ export interface CreateContainerKeyResponse {
 }
 
 export interface ListContainersResponse {
-  accounts: Container[];
+  containers: Container[];
   total: number;
   request_id?: string;
 }
 
 export interface GetContainerOptions {
-  forContainer: string;
+  containerId: string;
 }
 
 export interface GetContainerResponse {
-  account: Container;
+  container: Container;
   request_id?: string;
 }
 
 export interface RevokeContainerKeyOptions {
-  forContainer: string;
-  forKey: string;
+  containerId: string;
+  keyId: string;
 }
 
 export interface RevokeContainerKeyResponse {
-  revoked: boolean;
-  revokedAt: string;
+  result: {
+    revoked: boolean;
+    revokedAt: string;
+  };
   request_id?: string;
 }
 
 export interface DeleteContainerOptions {
-  forContainer: string;
+  containerId: string;
   confirm: true;
 }
 
 export interface DeleteContainerResponse {
-  deleted: boolean;
+  result: {
+    deleted: boolean;
+  };
   request_id?: string;
 }
