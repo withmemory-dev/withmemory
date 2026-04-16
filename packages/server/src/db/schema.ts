@@ -74,6 +74,9 @@ export const wmAccounts = pgTable(
   },
   (table) => ({
     parentAccountIdIdx: index("wm_accounts_parent_account_id_idx").on(table.parentAccountId),
+    // Partial unique index on (parent_account_id, name) WHERE parent_account_id IS NOT NULL
+    // enforces container name uniqueness per parent. Drizzle cannot declare partial indexes,
+    // so this is added manually in migration 0009.
   })
 );
 

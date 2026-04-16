@@ -117,6 +117,27 @@ export function containersRoute() {
       );
     }
 
+    // Check container name uniqueness within this parent account
+    const [existing] = await db
+      .select({ id: wmAccounts.id })
+      .from(wmAccounts)
+      .where(and(eq(wmAccounts.parentAccountId, account.id), eq(wmAccounts.name, name)))
+      .limit(1);
+
+    if (existing) {
+      return c.json(
+        {
+          error: {
+            code: "container_name_exists",
+            message: `A container named '${name}' already exists`,
+            request_id: c.get("requestId"),
+            details: { existing_container_id: existing.id },
+          },
+        },
+        409
+      );
+    }
+
     // Containers use a generated email to satisfy the NOT NULL unique constraint.
     const subEmailSuffix = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
     const subEmail = `sub_${subEmailSuffix}@sub.withmemory.internal`;

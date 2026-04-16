@@ -24,6 +24,7 @@ export class WithMemoryError extends Error {
   static ExtractionFailedError: typeof ExtractionFailedError;
   static KeyExpiredError: typeof KeyExpiredError;
   static ContainerLimitExceededError: typeof ContainerLimitExceededError;
+  static ContainerNameExistsError: typeof ContainerNameExistsError;
   static ConfirmationRequiredError: typeof ConfirmationRequiredError;
   static TimeoutError: typeof TimeoutError;
   static NetworkError: typeof NetworkError;
@@ -94,6 +95,13 @@ export class ConfirmationRequiredError extends WithMemoryError {
   }
 }
 
+export class ContainerNameExistsError extends WithMemoryError {
+  constructor(message: string, options: ErrorOptions) {
+    super(message, { ...options, code: "container_name_exists" });
+    this.name = "ContainerNameExistsError";
+  }
+}
+
 export class TimeoutError extends WithMemoryError {
   constructor(message: string, options?: Omit<ErrorOptions, "status">) {
     super(message, { ...options, status: 0, code: "timeout" });
@@ -117,6 +125,7 @@ WithMemoryError.PlanRequiredError = PlanRequiredError;
 WithMemoryError.ExtractionFailedError = ExtractionFailedError;
 WithMemoryError.KeyExpiredError = KeyExpiredError;
 WithMemoryError.ContainerLimitExceededError = ContainerLimitExceededError;
+WithMemoryError.ContainerNameExistsError = ContainerNameExistsError;
 WithMemoryError.ConfirmationRequiredError = ConfirmationRequiredError;
 WithMemoryError.TimeoutError = TimeoutError;
 WithMemoryError.NetworkError = NetworkError;
@@ -145,6 +154,8 @@ export function createError(
       return new PlanRequiredError(message, opts);
     case "container_limit_exceeded":
       return new ContainerLimitExceededError(message, opts);
+    case "container_name_exists":
+      return new ContainerNameExistsError(message, opts);
     case "confirmation_required":
       return new ConfirmationRequiredError(message, opts);
     case "extraction_failed":

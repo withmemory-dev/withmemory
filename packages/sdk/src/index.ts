@@ -9,6 +9,7 @@ export {
   PlanRequiredError,
   ExtractionFailedError,
   ContainerLimitExceededError,
+  ContainerNameExistsError,
   ConfirmationRequiredError,
   TimeoutError,
   NetworkError,

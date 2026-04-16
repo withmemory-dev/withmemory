@@ -85,6 +85,7 @@ try {
 | `QuotaExceededError` | `quota_exceeded` |
 | `PlanRequiredError` | `plan_required` |
 | `ContainerLimitExceededError` | `container_limit_exceeded` |
+| `ContainerNameExistsError` | `container_name_exists` |
 | `ConfirmationRequiredError` | `confirmation_required` |
 | `ExtractionFailedError` | `extraction_failed` |
 | `TimeoutError` | `timeout` |
@@ -101,6 +102,7 @@ try {
 | `quota_exceeded` | Server | 403 | Account memory limit reached (summed across parent + containers) |
 | `plan_required` | Server | 403 | Feature requires a higher plan tier |
 | `container_limit_exceeded` | Server | 403 | Account has reached its container cap |
+| `container_name_exists` | Server | 409 | A container with this name already exists under the parent account |
 | `confirmation_required` | Server | 400 | Destructive action requires `{ confirm: true }` in body |
 | `extraction_failed` | Server | 500 | LLM extraction pipeline failed (extraction path only) |
 | `timeout` | SDK | 0 | Request exceeded the configured timeout |
@@ -343,6 +345,8 @@ All methods are namespaced under `containers`:
 | `containers.delete({ containerId, confirm: true })` | `DELETE /v1/containers/:id` | `DeleteContainerResponse` | Yes |
 
 **SDK vs HTTP divergence:** `containers.create()`, `containers.list()`, and `containers.get()` return unwrapped `Container` / `Container[]` directly. The HTTP response includes an envelope (`{ container: {...} }` / `{ containers: [...] }`), but the SDK unwraps it for ergonomics.
+
+**Container name uniqueness:** Creating a container with a name that already exists under the same parent account returns 409 with error code `container_name_exists`. The `details.existing_container_id` field contains the ID of the existing container, enabling idempotent-feeling provisioning — an agent retrying after a timeout can use the existing container instead of creating a duplicate.
 
 **`scopes` accepts `string | string[]`:** When creating a container key, you can pass scopes as a comma-separated string (`"memory:read,memory:write"`) or as an array of strings (`["memory:read", "memory:write"]`). The SDK normalizes arrays to comma-separated strings before sending.
 
