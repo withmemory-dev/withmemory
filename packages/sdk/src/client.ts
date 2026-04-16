@@ -41,6 +41,7 @@ export class WithMemoryClient {
   private baseUrl: string;
   private timeout: number;
   private maxRetries: number;
+  private clientId: string | undefined;
   private registeredDefaults: Record<string, string> = {};
 
   constructor(config: WithMemoryConfig) {
@@ -48,6 +49,7 @@ export class WithMemoryClient {
     this.baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
     this.timeout = config.timeout ?? DEFAULT_TIMEOUT;
     this.maxRetries = config.maxRetries ?? DEFAULT_MAX_RETRIES;
+    this.clientId = config.clientId;
   }
 
   register(defaults: RegisterDefaults): void {
@@ -277,6 +279,7 @@ export class WithMemoryClient {
           headers: {
             ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
             Authorization: `Bearer ${this.apiKey}`,
+            ...(this.clientId ? { "X-WithMemory-Client": this.clientId } : {}),
           },
           body: body !== undefined ? JSON.stringify(body) : undefined,
           signal: controller.signal,

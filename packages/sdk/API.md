@@ -160,6 +160,16 @@ You can pass your own `X-Request-Id` header in the request to thread a tracing I
 
 On errors, `request_id` appears inside the `error` envelope. On success, it appears as a top-level sibling of the response data.
 
+### Client attribution
+
+The SDK sends an optional `X-WithMemory-Client` header on every request when `clientId` is set in the config. The recommended format is `agent-name/version` (e.g., `listing-ai/1.0`, `cursor/0.45`).
+
+```ts
+const client = createClient({ apiKey: 'wm_...', clientId: 'my-agent/1.0' });
+```
+
+The header is purely observational — the server logs it but does not enforce or validate it. It helps WithMemory debug reliability issues and enables future per-agent usage dashboards.
+
 ## Types
 
 ### Memory

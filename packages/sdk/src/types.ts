@@ -5,6 +5,8 @@ export interface WithMemoryConfig {
   timeout?: number;
   /** Maximum number of automatic retries on transient failures. Default: 3. */
   maxRetries?: number;
+  /** Optional client identifier sent as X-WithMemory-Client header. Format: agent-name/version. */
+  clientId?: string;
 }
 
 export interface RequestOptions {

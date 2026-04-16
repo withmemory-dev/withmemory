@@ -75,6 +75,13 @@ export function authMiddleware(db: Db) {
     c.set("account", account);
     c.set("apiKey", apiKey);
 
+    // Read optional attribution header for observability
+    const clientId = c.req.header("X-WithMemory-Client") || null;
+    c.set("clientId", clientId);
+    console.log(
+      `[client: ${clientId || "unknown"}] ${c.req.method} ${c.req.path} account=${account.id}`
+    );
+
     // Fire-and-forget last_used_at update — the race between concurrent
     // requests doesn't matter for this field, so no throttling needed.
     // waitUntil keeps the Worker alive until the write completes without

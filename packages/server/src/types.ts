@@ -13,4 +13,5 @@ export type AppVariables = {
   account: WmAccount;
   apiKey: WmApiKey;
   requestId: string;
+  clientId: string | null;
 };
