@@ -176,7 +176,17 @@ export class PlanEnforcementError extends Error {
     return new PlanEnforcementError(
       "plan_required",
       `This feature requires one of: ${opts.requiredTiers.join(", ")}. Current plan: ${opts.currentTier}.`,
-      { current_tier: opts.currentTier, required_tiers: opts.requiredTiers }
+      {
+        current_tier: opts.currentTier,
+        required_tiers: opts.requiredTiers,
+        recovery_options: [
+          {
+            action: "upgrade_plan",
+            url: "https://app.withmemory.dev/settings/billing",
+            description: "Upgrade to a plan that includes this feature",
+          },
+        ],
+      }
     );
   }
 

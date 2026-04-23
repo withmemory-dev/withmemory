@@ -22,6 +22,7 @@ const VerifyCodeSchema = z
   .object({
     email: z.string().email().max(255),
     code: z.string().length(6),
+    issuedTo: z.string().min(1).max(255).optional(),
   })
   .strict();
 
@@ -130,7 +131,7 @@ export function authRoute() {
   // ─── POST /auth/verify-code — verify code and return API key ──────────
   app.post("/auth/verify-code", zValidator("json", VerifyCodeSchema, zodErrorHook), async (c) => {
     const db = c.get("db");
-    const { email, code } = c.req.valid("json");
+    const { email, code, issuedTo } = c.req.valid("json");
     const normalizedEmail = email.toLowerCase();
 
     // Find the most recent unused, unexpired code for this email
@@ -235,11 +236,16 @@ export function authRoute() {
     const keyPrefix = rawKey.slice(0, 11);
     const keyHash = await sha256Hex(rawKey);
 
+    // Mirror the caller-supplied label into both `issued_to` (historical) and
+    // `name` (surfaced by /v1/account whoami). Keeping them in lockstep means
+    // the label the SDK sets is observable to the agent that created the key.
+    const keyLabel = issuedTo ?? "Agent-created key";
     await db.insert(wmApiKeys).values({
       accountId,
       keyHash,
       keyPrefix,
-      issuedTo: "Agent-created key",
+      issuedTo: keyLabel,
+      name: keyLabel,
       scopes: "memory:read,memory:write,account:admin",
     });
 

@@ -22,6 +22,7 @@ const RecallRequestSchema = z
     maxItems: z.number().int().min(1).max(50).optional(),
     maxTokens: z.number().int().min(10).max(2000).optional(),
     defaults: z.record(z.string(), z.string()).optional(),
+    threshold: z.enum(["strict", "balanced", "permissive"]).optional(),
   })
   .strict();
 
@@ -44,6 +45,10 @@ const FALLBACK_WEIGHTS: Partial<RankingWeights> = {
   importance: 0.25,
   nullEmbeddingFallback: 0,
 };
+
+// threshold presets map to the cosine-similarity floor below which semantic
+// candidates are dropped. "balanced" == the pre-existing hardcoded 0.2 default.
+const THRESHOLD_MAP = { strict: 0.4, balanced: 0.2, permissive: 0.1 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Response envelope types
@@ -150,7 +155,7 @@ export function recallRoute() {
   app.post("/recall", validator, async (c) => {
     const db = c.get("db");
     const account = c.get("account");
-    const { scope, query, maxItems, maxTokens, defaults } = c.req.valid("json");
+    const { scope, query, maxItems, maxTokens, defaults, threshold } = c.req.valid("json");
 
     const resolvedMaxItems = maxItems ?? 4;
     const resolvedMaxTokens = maxTokens ?? 150;
@@ -298,7 +303,9 @@ export function recallRoute() {
     // because similarity weight is 0) and the fallback weights.
     const rankingInputEmbedding: number[] =
       queryEmbedding ?? new Array(EMBEDDING_DIMENSIONS).fill(0);
-    const weights = strategy === "semantic" ? { similarityFloor: 0.2 } : FALLBACK_WEIGHTS;
+    const resolvedFloor = threshold ? THRESHOLD_MAP[threshold] : 0.2;
+    const weights =
+      strategy === "semantic" ? { similarityFloor: resolvedFloor } : FALLBACK_WEIGHTS;
 
     const ranked = rankMemories(candidates, rankingInputEmbedding, weights, new Date());
 

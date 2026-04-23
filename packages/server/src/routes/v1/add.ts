@@ -18,8 +18,13 @@ const AddRequestSchema = z
     scope: z.string().min(1).max(SCOPE_MAX_LENGTH),
     key: z.string().min(1).max(128).optional(),
     value: z.string().min(1).max(16384),
+    importance: z.number().min(0).max(1).optional(),
   })
-  .strict();
+  .strict()
+  .refine((data) => data.importance === undefined || data.key !== undefined, {
+    message: "importance is only valid with key (explicit path)",
+    path: ["importance"],
+  });
 
 const validator = zValidator("json", AddRequestSchema, zodErrorHook);
 
@@ -29,7 +34,7 @@ export function addRoute() {
   app.post("/memories", validator, async (c) => {
     const db = c.get("db");
     const account = c.get("account");
-    const { scope, key, value } = c.req.valid("json");
+    const { scope, key, value, importance } = c.req.valid("json");
 
     // Quota check: reject before any DB write or API call
     try {
@@ -71,6 +76,7 @@ export function addRoute() {
           content: value,
           source: "explicit",
           embedding,
+          importance: importance ?? 0.5,
         })
         .onConflictDoUpdate({
           target: [wmMemories.accountId, wmMemories.endUserId, wmMemories.key],
@@ -78,6 +84,7 @@ export function addRoute() {
             content: value,
             embedding,
             updatedAt: new Date(),
+            ...(importance !== undefined ? { importance } : {}),
           },
         })
         .returning();

@@ -1080,6 +1080,15 @@ tests.push({
         requiredTiers.includes("enterprise"),
       `expected required_tiers to include pro, team, enterprise`
     );
+    const recovery = res.body.error?.details?.recovery_options;
+    assert(
+      Array.isArray(recovery) && recovery.length > 0,
+      `expected recovery_options to be a non-empty array, got ${JSON.stringify(recovery)}`
+    );
+    assert(
+      recovery.some((o: { action?: string }) => o.action === "upgrade_plan"),
+      `expected recovery_options to include {action:"upgrade_plan"}, got ${JSON.stringify(recovery)}`
+    );
   },
 });
 
@@ -1119,6 +1128,145 @@ tests.push({
     }
   },
 });
+
+// ── threshold preset on /v1/recall ──────────────────────────────────────────
+// Seed one memory highly related to the query and one clearly unrelated, then
+// recall with strict (floor 0.4) and permissive (floor 0.1). Permissive must
+// return at least as many as strict, and the mismatched seeds should produce
+// at least one case where permissive returns more. Embeddings aren't
+// deterministic to a decimal; we test the relationship, not exact counts.
+
+const thresholdScope = `e2e_threshold_${Date.now()}`;
+
+tests.push({
+  name: "[setup] threshold: seed memories with a spread of topical distance",
+  fn: async () => {
+    // Strict (0.4) vs permissive (0.1) only diverges when at least one memory
+    // lands in the (0.1, 0.4) cosine similarity band. Two seeds weren't
+    // enough — both tended to fall on one side of the band depending on
+    // phrasing. Five seeds with deliberately graded topical distance to the
+    // food query make it very likely at least one sits in the band.
+    const seeds: Array<{ key: string; value: string }> = [
+      { key: "food_direct", value: "My favorite foods are pizza and pasta for dinner." },
+      { key: "food_cuisine", value: "I love Italian cuisine, especially fresh handmade pasta." },
+      { key: "food_adjacent", value: "I enjoy cooking simple meals on weekends with my family." },
+      { key: "drink_routine", value: "I drink green tea with my breakfast every morning." },
+      { key: "job_unrelated", value: "I work as a quantitative analyst at a hedge fund in Manhattan." },
+    ];
+    for (const s of seeds) {
+      const res = await apiCall("/v1/memories", {
+        scope: thresholdScope,
+        key: s.key,
+        value: s.value,
+      });
+      assert(res.status === 200, `seed ${s.key}: expected 200, got ${res.status}`);
+    }
+  },
+});
+
+tests.push({
+  name: "threshold preset strict vs permissive produces different result counts",
+  fn: async () => {
+    const query = "What are my favorite foods to eat?";
+
+    const strictRes = await apiCall("/v1/recall", {
+      scope: thresholdScope,
+      query,
+      threshold: "strict",
+      maxItems: 10,
+    });
+    assert(strictRes.status === 200, `strict: expected 200, got ${strictRes.status}`);
+
+    const permissiveRes = await apiCall("/v1/recall", {
+      scope: thresholdScope,
+      query,
+      threshold: "permissive",
+      maxItems: 10,
+    });
+    assert(permissiveRes.status === 200, `permissive: expected 200, got ${permissiveRes.status}`);
+
+    const strictCount = strictRes.body.memories?.length ?? 0;
+    const permissiveCount = permissiveRes.body.memories?.length ?? 0;
+    assert(
+      permissiveCount >= strictCount,
+      `expected permissive (${permissiveCount}) >= strict (${strictCount})`
+    );
+    assert(
+      permissiveCount > strictCount,
+      `expected permissive to keep at least one result strict drops; got strict=${strictCount} permissive=${permissiveCount}`
+    );
+  },
+});
+
+// ── importance on /v1/memories (explicit path) ──────────────────────────────
+// importance is not returned in the Memory shape, so we verify via ranking
+// effect: two near-identical memories differing only in importance should
+// rank with the high-importance one first on recall.
+
+const importanceScope = `e2e_importance_${Date.now()}`;
+
+tests.push({
+  name: "importance ranking effect: high-importance memory ranks above low-importance",
+  fn: async () => {
+    const highRes = await apiCall("/v1/memories", {
+      scope: importanceScope,
+      key: "fact_high",
+      value: "The project launches on Tuesday next week.",
+      importance: 0.9,
+    });
+    assert(highRes.status === 200, `high: expected 200, got ${highRes.status}`);
+
+    const lowRes = await apiCall("/v1/memories", {
+      scope: importanceScope,
+      key: "fact_low",
+      value: "The project launches on Tuesday next week.",
+      importance: 0.1,
+    });
+    assert(lowRes.status === 200, `low: expected 200, got ${lowRes.status}`);
+
+    const recallRes = await apiCall("/v1/recall", {
+      scope: importanceScope,
+      query: "When does the project launch?",
+      maxItems: 10,
+    });
+    assert(recallRes.status === 200, `recall: expected 200, got ${recallRes.status}`);
+
+    const memories = recallRes.body.memories as Array<{ key: string | null }>;
+    const highIdx = memories.findIndex((m) => m.key === "fact_high");
+    const lowIdx = memories.findIndex((m) => m.key === "fact_low");
+    assert(highIdx !== -1, `expected fact_high to be in recall results`);
+    assert(lowIdx !== -1, `expected fact_low to be in recall results`);
+    assert(
+      highIdx < lowIdx,
+      `expected fact_high (idx ${highIdx}) to rank above fact_low (idx ${lowIdx})`
+    );
+  },
+});
+
+tests.push({
+  name: "importance without key returns 400 invalid_request",
+  fn: async () => {
+    const res = await apiCall("/v1/memories", {
+      scope: importanceScope,
+      value: "Some extraction-path value that shouldn't accept importance.",
+      importance: 0.5,
+    });
+    assert(res.status === 400, `expected 400, got ${res.status}`);
+    assert(
+      res.body.error?.code === "invalid_request",
+      `expected error.code "invalid_request", got "${res.body.error?.code}"`
+    );
+  },
+});
+
+// ── issuedTo on /v1/auth/verify-code ────────────────────────────────────────
+// Manual-verification-only: verify-code requires a real email round-trip
+// (Resend sends a 6-digit code). Writing a full fixture just to verify one
+// label parameter isn't worth the test weight. Verify by inspecting the
+// wm_api_keys row after a real signup, or by curl against a known code:
+//   curl -s -X POST $BASE/v1/auth/verify-code \
+//     -d '{"email":"x@y","code":"123456","issuedTo":"my-label"}'
+//   → then SELECT name, issued_to FROM wm_api_keys WHERE key_prefix = ...
 
 async function main() {
   const totalStart = performance.now();
