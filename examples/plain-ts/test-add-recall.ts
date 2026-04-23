@@ -1268,6 +1268,176 @@ tests.push({
 //     -d '{"email":"x@y","code":"123456","issuedTo":"my-label"}'
 //   → then SELECT name, issued_to FROM wm_api_keys WHERE key_prefix = ...
 
+// ── /v1/cache/claim response enhancements ──────────────────────────────────
+// Create a cache, seed two entries, claim with the main API key, then verify
+// (a) scope + containerKey are present, (b) the auto-minted key can recall,
+// (c) whether scopes are enforced on write (finding-only, not a failure),
+// (d) the auto-minted key's label shows via whoami, and (e) a second claim
+// returns 409 with the new one-shot key wording.
+
+let claimRawToken: string;
+let claimClaimToken: string;
+let claimContainerKey: string;
+let claimContainerScope: string;
+
+tests.push({
+  name: "[setup] cache.claim: seed a cache with two entries",
+  fn: async () => {
+    // POST /v1/cache is unauthenticated and rate-limited at 3 caches per IP
+    // per 24h. Plenty for routine E2E runs; hammering will eventually 429.
+    const createRes = await fetch(`${BASE_URL}/v1/cache`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ttlSeconds: 3600 }),
+    });
+    assert(createRes.status === 201, `cache create: expected 201, got ${createRes.status}`);
+    const createBody = (await createRes.json()) as any;
+    assert(typeof createBody.cache?.rawToken === "string", "rawToken missing");
+    assert(typeof createBody.cache?.claimToken === "string", "claimToken missing");
+    claimRawToken = createBody.cache.rawToken;
+    claimClaimToken = createBody.cache.claimToken;
+
+    for (const [k, v] of [
+      ["pref_color", "I prefer the color blue."],
+      ["pref_language", "I prefer English over French."],
+    ] as const) {
+      const setRes = await fetch(`${BASE_URL}/v1/cache/set`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${claimRawToken}`,
+        },
+        body: JSON.stringify({ key: k, value: v }),
+      });
+      assert(setRes.status === 200, `cache set ${k}: expected 200, got ${setRes.status}`);
+    }
+  },
+});
+
+tests.push({
+  name: "cache.claim response includes scope and containerKey",
+  fn: async () => {
+    const res = await apiCall("/v1/cache/claim", { claimToken: claimClaimToken });
+    assert(res.status === 200, `claim: expected 200, got ${res.status} body=${JSON.stringify(res.body)}`);
+    assert(res.body.result?.claimed === true, `expected claimed=true`);
+    assert(
+      typeof res.body.result?.containerId === "string" && res.body.result.containerId.length > 0,
+      `containerId missing`
+    );
+    assert(
+      res.body.result?.memoriesCreated === 2,
+      `expected memoriesCreated=2, got ${res.body.result?.memoriesCreated}`
+    );
+    assert(
+      typeof res.body.result?.scope === "string" && res.body.result.scope.startsWith("cache-"),
+      `expected scope starting with "cache-", got "${res.body.result?.scope}"`
+    );
+    assert(
+      typeof res.body.result?.containerKey === "string" &&
+        res.body.result.containerKey.startsWith("wm_live_"),
+      `expected containerKey starting with wm_live_, got "${res.body.result?.containerKey}"`
+    );
+    claimContainerKey = res.body.result.containerKey;
+    claimContainerScope = res.body.result.scope;
+  },
+});
+
+tests.push({
+  name: "Auto-minted container key can recall against returned scope",
+  fn: async () => {
+    const res = await fetch(`${BASE_URL}/v1/recall`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${claimContainerKey}`,
+      },
+      body: JSON.stringify({
+        scope: claimContainerScope,
+        query: "What color do I prefer?",
+        maxItems: 10,
+      }),
+    });
+    assert(res.status === 200, `recall: expected 200, got ${res.status}`);
+    const body = (await res.json()) as any;
+    const memKeys = (body.memories ?? []).map((m: { key: string | null }) => m.key);
+    assert(
+      memKeys.includes("pref_color"),
+      `expected pref_color in recalled memories, got ${JSON.stringify(memKeys)}`
+    );
+  },
+});
+
+tests.push({
+  name: "FINDING: auto-minted key write attempt (scope enforcement status)",
+  fn: async () => {
+    // Probe: the auto-minted key has scopes="memory:read". Auth middleware
+    // does not currently enforce scopes on any route, so this write is
+    // expected to succeed with 200 until scope enforcement lands. The test
+    // passes for either outcome (200 = gap still open, 403/401 = gap closed)
+    // and logs a warning when the gap is still open so every run makes it
+    // visible in the output.
+    const res = await fetch(`${BASE_URL}/v1/memories`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${claimContainerKey}`,
+      },
+      body: JSON.stringify({
+        scope: claimContainerScope,
+        key: "scope_gap_probe",
+        value: "This write succeeds only because scopes are not enforced.",
+      }),
+    });
+    if (res.status === 403 || res.status === 401) {
+      return;
+    }
+    assert(
+      res.status === 200,
+      `scope gap probe: expected 200 (no enforcement) or 403/401 (enforced), got ${res.status}`
+    );
+    console.log(
+      `  ⚠ FINDING: memory:read-only key wrote to /v1/memories (HTTP ${res.status}). Scope enforcement must land before SDK v0.1.0 publish.`
+    );
+  },
+});
+
+tests.push({
+  name: "whoami with container key returns key.name starting with cache-claim/",
+  fn: async () => {
+    const res = await fetch(`${BASE_URL}/v1/account`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${claimContainerKey}` },
+    });
+    assert(res.status === 200, `whoami: expected 200, got ${res.status}`);
+    const body = (await res.json()) as any;
+    assert(
+      typeof body.key?.name === "string" && body.key.name.startsWith("cache-claim/"),
+      `expected key.name to start with "cache-claim/", got "${body.key?.name}"`
+    );
+  },
+});
+
+tests.push({
+  name: "Second claim of same token returns 409 with one-shot key wording",
+  fn: async () => {
+    const res = await apiCall("/v1/cache/claim", { claimToken: claimClaimToken });
+    assert(res.status === 409, `expected 409, got ${res.status}`);
+    assert(
+      res.body.error?.code === "already_claimed",
+      `expected code "already_claimed", got "${res.body.error?.code}"`
+    );
+    const msg = res.body.error?.message ?? "";
+    assert(
+      msg.includes("cannot be re-issued"),
+      `expected message to include "cannot be re-issued", got "${msg}"`
+    );
+    assert(
+      msg.includes("POST /v1/containers/"),
+      `expected message to include recovery path "POST /v1/containers/", got "${msg}"`
+    );
+  },
+});
+
 async function main() {
   const totalStart = performance.now();
   let passed = 0;

@@ -12,7 +12,7 @@ import { authMiddleware } from "../../middleware/auth";
 import { createDb } from "../../db/client";
 import { checkMemoryQuota, PlanEnforcementError } from "../../lib/plan-enforcement";
 
-const { wmCaches, wmCacheEntries, wmAccounts, wmMemories } = schema;
+const { wmCaches, wmCacheEntries, wmAccounts, wmMemories, wmApiKeys } = schema;
 
 /**
  * Signals a race-condition failure detected inside the claim transaction.
@@ -25,6 +25,16 @@ class ClaimRaceError extends Error {
     this.name = "ClaimRaceError";
   }
 }
+
+// Shared 409 message for an already-claimed cache on the claim endpoint.
+// Explains the one-shot container-key behavior so agents know the original
+// claim response was their only chance to see the key, and points at the
+// Pro+ recovery path (containers.createKey). Kept as a single constant so
+// the pre-transaction guard and the ClaimRaceError branch can't drift.
+const ALREADY_CLAIMED_MESSAGE =
+  "Cache has already been claimed. The container key was returned in the " +
+  "original claim response and cannot be re-issued. If you need a new key, " +
+  "use POST /v1/containers/{containerId}/keys (requires Pro plan or above).";
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────
 
@@ -377,7 +387,7 @@ export function cacheRoute() {
         {
           error: {
             code: "already_claimed",
-            message: "Cache has already been claimed",
+            message: ALREADY_CLAIMED_MESSAGE,
             request_id: c.get("requestId"),
           },
         },
@@ -418,12 +428,18 @@ export function cacheRoute() {
       throw e;
     }
 
-    // Wrap container + end user + memory inserts + cache claim update in a
-    // single transaction. SELECT ... FOR UPDATE on the cache row serializes
-    // concurrent claims on the same token, and an atomic commit means a
-    // partial failure cannot leave an orphaned container with the cache
-    // still marked as claimable.
-    let claimResult: { containerId: string; memoriesCreated: number };
+    // Wrap container + end user + memory inserts + auto-minted key + cache
+    // claim update in a single transaction. SELECT ... FOR UPDATE on the
+    // cache row serializes concurrent claims on the same token, and an
+    // atomic commit means a partial failure cannot leave an orphaned
+    // container with the cache still marked as claimable.
+    const mintingKeyId = c.get("apiKey").id;
+    let claimResult: {
+      containerId: string;
+      memoriesCreated: number;
+      scope: string;
+      containerRawKey: string;
+    };
     try {
       claimResult = await db.transaction(async (tx) => {
         const [freshCache] = await tx
@@ -474,6 +490,34 @@ export function cacheRoute() {
           });
         }
 
+        // Auto-mint a read-only container key so the claim response is
+        // self-contained: the agent can immediately create a client and
+        // recall against the returned scope. No TTL — the container is
+        // durable and Free/Basic tiers can't mint replacements via
+        // containers.createKey (Pro+ gated), so an expiring key would
+        // strand the claimed data. parentKeyId ties the auto-minted key
+        // back to the agent key that issued the claim, for audit.
+        const keyRandomBuf = new Uint8Array(32);
+        crypto.getRandomValues(keyRandomBuf);
+        const rawRandom = btoa(String.fromCharCode(...keyRandomBuf))
+          .replace(/\+/g, "-")
+          .replace(/\//g, "_")
+          .replace(/=+$/, "");
+        const containerRawKey = `wm_live_${rawRandom}`;
+        const containerKeyPrefix = containerRawKey.slice(0, 11);
+        const containerKeyHash = await sha256Hex(containerRawKey);
+        const keyLabel = `cache-claim/${shortId}`;
+
+        await tx.insert(wmApiKeys).values({
+          accountId: container.id,
+          keyHash: containerKeyHash,
+          keyPrefix: containerKeyPrefix,
+          name: keyLabel,
+          issuedTo: keyLabel,
+          scopes: "memory:read",
+          parentKeyId: mintingKeyId,
+        });
+
         await tx
           .update(wmCaches)
           .set({
@@ -482,7 +526,12 @@ export function cacheRoute() {
           })
           .where(eq(wmCaches.id, cache.id));
 
-        return { containerId: container.id, memoriesCreated: entries.length };
+        return {
+          containerId: container.id,
+          memoriesCreated: entries.length,
+          scope: `cache-${cache.id}`,
+          containerRawKey,
+        };
       });
     } catch (e) {
       if (e instanceof ClaimRaceError) {
@@ -492,7 +541,7 @@ export function cacheRoute() {
             ? "Cache not found"
             : e.code === "cache_expired"
               ? "Cache has expired"
-              : "Cache has already been claimed";
+              : ALREADY_CLAIMED_MESSAGE;
         return c.json(
           { error: { code: e.code, message, request_id: c.get("requestId") } },
           status
@@ -506,6 +555,8 @@ export function cacheRoute() {
         claimed: true,
         containerId: claimResult.containerId,
         memoriesCreated: claimResult.memoriesCreated,
+        scope: claimResult.scope,
+        containerKey: claimResult.containerRawKey,
       },
       request_id: c.get("requestId"),
     });
