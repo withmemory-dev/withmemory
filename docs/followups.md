@@ -12,10 +12,6 @@ Drizzle Kit pooler pipeline unreliable. Session pooler URL (PROD_MIGRATION_URL) 
 
 ---
 
-## Commit quota is pre-check only
-
-**Logged:** April 2026
-
 ## test:e2e script only runs test-set-recall.ts
 
 **Logged:** April 2026
