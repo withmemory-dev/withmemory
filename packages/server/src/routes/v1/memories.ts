@@ -5,6 +5,7 @@ import { eq, and, isNull, or, ilike, gt, lt, sql, type SQL } from "drizzle-orm";
 import * as schema from "../../db/schema";
 import { SCOPE_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
 import { findEndUser } from "../../lib/end-users";
+import { requireScopes } from "../../lib/scopes";
 import type { WorkerEnv, AppVariables } from "../../types";
 
 const { wmMemories, wmEndUsers } = schema;
@@ -89,6 +90,9 @@ export function memoriesRoute() {
 
   // POST /v1/memories/list — list memories with filtering, search, cursor pagination
   app.post("/memories/list", listValidator, async (c) => {
+    const scopeError = requireScopes(c, "memory:read");
+    if (scopeError) return c.json(scopeError, 403);
+
     const db = c.get("db");
     const account = c.get("account");
     const {
@@ -266,6 +270,9 @@ export function memoriesRoute() {
 
   // ── DELETE /v1/memories/:id — delete a single memory by ID ─────────────
   app.delete("/memories/:id", async (c) => {
+    const scopeError = requireScopes(c, "memory:write");
+    if (scopeError) return c.json(scopeError, 403);
+
     const db = c.get("db");
     const account = c.get("account");
     const memoryId = c.req.param("id");

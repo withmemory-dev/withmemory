@@ -7,6 +7,7 @@ import type { WorkerEnv, AppVariables } from "../../types";
 import { ensureEndUser } from "../../lib/end-users";
 import { embedTexts } from "../../lib/embeddings";
 import { checkMemoryQuota, PlanEnforcementError } from "../../lib/plan-enforcement";
+import { requireScopes } from "../../lib/scopes";
 import { addWithExtraction, ExtractionError } from "../../lib/add-with-extraction";
 import { parseMaxInputBytes } from "../../lib/extraction";
 import EXTRACTION_PROMPT from "../../lib/extraction-prompt.txt";
@@ -32,6 +33,9 @@ export function addRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
   app.post("/memories", validator, async (c) => {
+    const scopeError = requireScopes(c, "memory:write");
+    if (scopeError) return c.json(scopeError, 403);
+
     const db = c.get("db");
     const account = c.get("account");
     const { scope, key, value, importance } = c.req.valid("json");

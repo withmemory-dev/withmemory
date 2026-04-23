@@ -11,6 +11,7 @@ import { cacheAuthMiddleware } from "../../middleware/cache-auth";
 import { authMiddleware } from "../../middleware/auth";
 import { createDb } from "../../db/client";
 import { checkMemoryQuota, PlanEnforcementError } from "../../lib/plan-enforcement";
+import { requireScopes } from "../../lib/scopes";
 
 const { wmCaches, wmCacheEntries, wmAccounts, wmMemories, wmApiKeys } = schema;
 
@@ -358,6 +359,9 @@ export function cacheRoute() {
   });
 
   app.post("/cache/claim", zValidator("json", ClaimSchema, zodErrorHook), async (c) => {
+    const scopeError = requireScopes(c, "account:admin");
+    if (scopeError) return c.json(scopeError, 403);
+
     const db = c.get("db");
     const account = c.get("account");
     const { claimToken } = c.req.valid("json");

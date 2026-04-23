@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -7,6 +7,7 @@ import type { WorkerEnv, AppVariables } from "../../types";
 import { zodErrorHook } from "../../lib/validation";
 import { requirePlan, PlanEnforcementError } from "../../lib/plan-enforcement";
 import { sha256Hex } from "../../lib/hash";
+import { requireScopes } from "../../lib/scopes";
 
 const { wmAccounts, wmApiKeys, wmMemories } = schema;
 
@@ -18,32 +19,32 @@ const CONTAINER_LIMITS: Record<string, number> = {
 };
 
 // ─── Shared guard: require top-level account with account:admin scope ──────
-function requireAdminScope(c: {
-  get(key: "account"): schema.WmAccount;
-  get(key: "apiKey"): schema.WmApiKey;
-}) {
+// Two distinct failure modes with distinct wire responses:
+//   • Container account calling container management → 401 unauthorized
+//     (an identity-hierarchy problem, not a scope problem)
+//   • Scope missing → 403 insufficient_scope via requireScopes, matching
+//     every other scope-gated route in the API.
+// Returns a ready-to-return Response on failure, null on success.
+function requireAdminScope(
+  c: Context<{ Bindings: WorkerEnv; Variables: AppVariables }>
+): Response | null {
   const account = c.get("account");
-  const apiKey = c.get("apiKey");
 
-  // Containers cannot call container management endpoints
   if (account.parentAccountId !== null) {
-    return {
-      error: {
-        code: "unauthorized",
-        message: "Containers cannot manage other containers",
-      } as const,
-    };
+    return c.json(
+      {
+        error: {
+          code: "unauthorized",
+          message: "Containers cannot manage other containers",
+          request_id: c.get("requestId"),
+        },
+      },
+      401
+    );
   }
 
-  // Require account:admin scope
-  if (!apiKey.scopes.includes("account:admin")) {
-    return {
-      error: {
-        code: "unauthorized",
-        message: "API key lacks account:admin scope",
-      } as const,
-    };
-  }
+  const scopeError = requireScopes(c, "account:admin");
+  if (scopeError) return c.json(scopeError, 403);
 
   return null;
 }
@@ -77,8 +78,8 @@ export function containersRoute() {
 
   // ─── POST /containers — create a container ──────────────────────────
   app.post("/containers", zValidator("json", CreateContainerSchema, zodErrorHook), async (c) => {
-    const scopeError = requireAdminScope(c);
-    if (scopeError) return c.json(scopeError, 401);
+    const guard = requireAdminScope(c);
+    if (guard) return guard;
 
     const db = c.get("db");
     const account = c.get("account");
@@ -188,8 +189,8 @@ export function containersRoute() {
 
   // ─── POST /containers/:id/keys — mint a container key ───────────────
   app.post("/containers/:id/keys", zValidator("json", CreateKeySchema, zodErrorHook), async (c) => {
-    const scopeError = requireAdminScope(c);
-    if (scopeError) return c.json(scopeError, 401);
+    const guard = requireAdminScope(c);
+    if (guard) return guard;
 
     const db = c.get("db");
     const account = c.get("account");
@@ -289,8 +290,8 @@ export function containersRoute() {
 
   // ─── GET /containers — list containers ────────────────────────────────
   app.get("/containers", async (c) => {
-    const scopeError = requireAdminScope(c);
-    if (scopeError) return c.json(scopeError, 401);
+    const guard = requireAdminScope(c);
+    if (guard) return guard;
 
     const db = c.get("db");
     const account = c.get("account");
@@ -338,8 +339,8 @@ export function containersRoute() {
 
   // ─── GET /containers/:id — get a specific container ───────────────────
   app.get("/containers/:id", async (c) => {
-    const scopeError = requireAdminScope(c);
-    if (scopeError) return c.json(scopeError, 401);
+    const guard = requireAdminScope(c);
+    if (guard) return guard;
 
     const db = c.get("db");
     const account = c.get("account");
@@ -402,8 +403,8 @@ export function containersRoute() {
 
   // ─── DELETE /containers/:id/keys/:keyId — revoke a container key ──────
   app.delete("/containers/:id/keys/:keyId", async (c) => {
-    const scopeError = requireAdminScope(c);
-    if (scopeError) return c.json(scopeError, 401);
+    const guard = requireAdminScope(c);
+    if (guard) return guard;
 
     const db = c.get("db");
     const account = c.get("account");
@@ -442,8 +443,8 @@ export function containersRoute() {
     "/containers/:id",
     zValidator("json", DeleteContainerSchema, zodErrorHook),
     async (c) => {
-      const scopeError = requireAdminScope(c);
-      if (scopeError) return c.json(scopeError, 401);
+      const guard = requireAdminScope(c);
+      if (guard) return guard;
 
       const db = c.get("db");
       const account = c.get("account");

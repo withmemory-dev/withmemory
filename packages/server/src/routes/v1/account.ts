@@ -6,6 +6,7 @@ import * as schema from "../../db/schema";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { zodErrorHook } from "../../lib/validation";
 import { requirePlan, PlanEnforcementError } from "../../lib/plan-enforcement";
+import { requireScopes } from "../../lib/scopes";
 
 const { wmAccounts, wmMemories } = schema;
 
@@ -33,6 +34,9 @@ export function accountRoute() {
 
   // GET /account — whoami: key scopes, plan tier, account metadata
   app.get("/account", async (c) => {
+    const scopeError = requireScopes(c, "memory:read");
+    if (scopeError) return c.json(scopeError, 403);
+
     const account = c.get("account");
     const apiKey = c.get("apiKey");
 
@@ -59,6 +63,9 @@ export function accountRoute() {
 
   // GET /account/usage — current quota usage
   app.get("/account/usage", async (c) => {
+    const scopeError = requireScopes(c, "memory:read");
+    if (scopeError) return c.json(scopeError, 403);
+
     const db = c.get("db");
     const account = c.get("account");
 
@@ -87,6 +94,9 @@ export function accountRoute() {
 
   // POST /account/extraction-prompt — set custom extraction prompt
   app.post("/account/extraction-prompt", setPromptValidator, async (c) => {
+    const scopeError = requireScopes(c, "account:admin");
+    if (scopeError) return c.json(scopeError, 403);
+
     const db = c.get("db");
     const account = c.get("account");
     const { prompt } = c.req.valid("json");
@@ -113,6 +123,9 @@ export function accountRoute() {
 
   // GET /account/extraction-prompt — read current prompt state
   app.get("/account/extraction-prompt", async (c) => {
+    const scopeError = requireScopes(c, "memory:read");
+    if (scopeError) return c.json(scopeError, 403);
+
     const account = c.get("account");
 
     if (account.extractionPrompt) {
@@ -127,6 +140,9 @@ export function accountRoute() {
 
   // DELETE /account/extraction-prompt — reset to default
   app.delete("/account/extraction-prompt", async (c) => {
+    const scopeError = requireScopes(c, "account:admin");
+    if (scopeError) return c.json(scopeError, 403);
+
     const db = c.get("db");
     const account = c.get("account");
 

@@ -1268,12 +1268,13 @@ tests.push({
 //     -d '{"email":"x@y","code":"123456","issuedTo":"my-label"}'
 //   → then SELECT name, issued_to FROM wm_api_keys WHERE key_prefix = ...
 
-// ── /v1/cache/claim response enhancements ──────────────────────────────────
+// ── /v1/cache/claim response enhancements + scope enforcement ──────────────
 // Create a cache, seed two entries, claim with the main API key, then verify
 // (a) scope + containerKey are present, (b) the auto-minted key can recall,
-// (c) whether scopes are enforced on write (finding-only, not a failure),
-// (d) the auto-minted key's label shows via whoami, and (e) a second claim
-// returns 409 with the new one-shot key wording.
+// (c) the auto-minted key is rejected 403 insufficient_scope on write,
+// (d) the same on DELETE /v1/memories/:id, (e) container management is
+// closed to this key, (f) the key's label shows via whoami, (g) a second
+// claim returns 409 with the one-shot key wording.
 
 let claimRawToken: string;
 let claimClaimToken: string;
@@ -1368,14 +1369,8 @@ tests.push({
 });
 
 tests.push({
-  name: "FINDING: auto-minted key write attempt (scope enforcement status)",
+  name: "Read-only key cannot write via POST /v1/memories (insufficient_scope)",
   fn: async () => {
-    // Probe: the auto-minted key has scopes="memory:read". Auth middleware
-    // does not currently enforce scopes on any route, so this write is
-    // expected to succeed with 200 until scope enforcement lands. The test
-    // passes for either outcome (200 = gap still open, 403/401 = gap closed)
-    // and logs a warning when the gap is still open so every run makes it
-    // visible in the output.
     const res = await fetch(`${BASE_URL}/v1/memories`, {
       method: "POST",
       headers: {
@@ -1385,18 +1380,68 @@ tests.push({
       body: JSON.stringify({
         scope: claimContainerScope,
         key: "scope_gap_probe",
-        value: "This write succeeds only because scopes are not enforced.",
+        value: "This write must be rejected with 403 insufficient_scope.",
       }),
     });
-    if (res.status === 403 || res.status === 401) {
-      return;
-    }
+    assert(res.status === 403, `expected 403, got ${res.status}`);
+    const body = (await res.json()) as any;
     assert(
-      res.status === 200,
-      `scope gap probe: expected 200 (no enforcement) or 403/401 (enforced), got ${res.status}`
+      body.error?.code === "insufficient_scope",
+      `expected error.code "insufficient_scope", got "${body.error?.code}"`
     );
-    console.log(
-      `  ⚠ FINDING: memory:read-only key wrote to /v1/memories (HTTP ${res.status}). Scope enforcement must land before SDK v0.1.0 publish.`
+    const required = body.error?.details?.required;
+    assert(
+      Array.isArray(required) && required.includes("memory:write"),
+      `expected details.required to include "memory:write", got ${JSON.stringify(required)}`
+    );
+  },
+});
+
+tests.push({
+  name: "Read-only key cannot DELETE /v1/memories/:id (insufficient_scope)",
+  fn: async () => {
+    // Any UUID works for the scope check — it fires before the row lookup.
+    const res = await fetch(
+      `${BASE_URL}/v1/memories/00000000-0000-0000-0000-000000000000`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${claimContainerKey}` },
+      }
+    );
+    assert(res.status === 403, `expected 403, got ${res.status}`);
+    const body = (await res.json()) as any;
+    assert(
+      body.error?.code === "insufficient_scope",
+      `expected error.code "insufficient_scope", got "${body.error?.code}"`
+    );
+  },
+});
+
+tests.push({
+  name: "Read-only key cannot manage containers (insufficient_scope)",
+  fn: async () => {
+    // The auto-minted key is under the container (parentAccountId != null),
+    // so requireAdminScope returns 401 unauthorized (account-hierarchy
+    // check) BEFORE the scope check fires. This test asserts the route is
+    // gated; the specific code depends on which check runs first. Accept
+    // either 401 unauthorized (hierarchy) or 403 insufficient_scope (scope)
+    // — both prove the route is closed to this key. Report which fired.
+    const res = await fetch(`${BASE_URL}/v1/containers`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${claimContainerKey}`,
+      },
+      body: JSON.stringify({ name: "should-be-rejected" }),
+    });
+    assert(
+      res.status === 401 || res.status === 403,
+      `expected 401 or 403, got ${res.status}`
+    );
+    const body = (await res.json()) as any;
+    assert(
+      body.error?.code === "unauthorized" || body.error?.code === "insufficient_scope",
+      `expected code "unauthorized" or "insufficient_scope", got "${body.error?.code}"`
     );
   },
 });

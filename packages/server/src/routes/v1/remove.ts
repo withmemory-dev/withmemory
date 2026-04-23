@@ -5,6 +5,7 @@ import { eq, and } from "drizzle-orm";
 import * as schema from "../../db/schema";
 import { SCOPE_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
 import { findEndUser } from "../../lib/end-users";
+import { requireScopes } from "../../lib/scopes";
 import type { WorkerEnv, AppVariables } from "../../types";
 
 const { wmMemories } = schema;
@@ -22,6 +23,9 @@ export function removeRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
   app.post("/memories/remove", validator, async (c) => {
+    const scopeError = requireScopes(c, "memory:write");
+    if (scopeError) return c.json(scopeError, 403);
+
     const db = c.get("db");
     const account = c.get("account");
     const { scope, key } = c.req.valid("json");

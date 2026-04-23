@@ -8,6 +8,7 @@ import { SCOPE_MAX_LENGTH, zodErrorHook } from "../../lib/validation";
 import type { WorkerEnv, AppVariables } from "../../types";
 import { embedQuery, EMBEDDING_DIMENSIONS } from "../../lib/embeddings";
 import { rankMemories, type RankableMemory, type RankingWeights } from "../../lib/ranking";
+import { requireScopes } from "../../lib/scopes";
 
 const { wmEndUsers, wmMemories } = schema;
 
@@ -153,6 +154,9 @@ export function recallRoute() {
   const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
   app.post("/recall", validator, async (c) => {
+    const scopeError = requireScopes(c, "memory:read");
+    if (scopeError) return c.json(scopeError, 403);
+
     const db = c.get("db");
     const account = c.get("account");
     const { scope, query, maxItems, maxTokens, defaults, threshold } = c.req.valid("json");
