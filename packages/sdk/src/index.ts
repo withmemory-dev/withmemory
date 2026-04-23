@@ -11,7 +11,7 @@ export {
   ExtractionFailedError,
   ContainerLimitExceededError,
   ContainerNameExistsError,
-  ConfirmationRequiredError,
+  InsufficientScopeError,
   RateLimitedError,
   CacheEntryLimitError,
   CacheExpiredError,
@@ -62,6 +62,10 @@ export type {
   CacheListResponse,
   CacheClaimOptions,
   CacheClaimResponse,
+  RequestCodeParams,
+  RequestCodeResponse,
+  VerifyCodeParams,
+  VerifyCodeResponse,
 } from "./types";
 
 import { WithMemoryClient, createClient } from "./client";
@@ -76,6 +80,8 @@ import type {
   ListOptions,
   CacheCreateOptions,
   CacheClaimOptions,
+  RequestCodeParams,
+  VerifyCodeParams,
 } from "./types";
 
 // ─── Default singleton ──────────────────────────────────────────────────────
@@ -83,19 +89,55 @@ import type {
 //   import { memory } from '@withmemory/sdk';
 //   memory.configure({ apiKey: 'wm_...' });
 //   await memory.add({ value: 'Alice', key: 'name', scope: 'user_1' });
+//
+// Authentication precedence for methods that require a key:
+//   1. An explicit `memory.configure({ apiKey })` call (wins over env).
+//   2. `process.env.WITHMEMORY_API_KEY` at first use (Node only; ignored
+//      in browser-like environments where `process` is undefined).
+//   3. Throw — the SDK can't dispatch authenticated calls without a key.
+// Pre-auth methods (`cache.create`, `requestCode`, `verifyCode`) skip the
+// third step and construct a temporary client with an empty key instead.
 
 let instance: WithMemoryClient | null = null;
 
+// Read WITHMEMORY_API_KEY via globalThis rather than `process` directly so
+// the SDK stays browser-safe without a Node types dependency. Returns
+// undefined in any environment that doesn't expose a Node-style process.env.
+function envApiKey(): string | undefined {
+  const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  return proc?.env?.WITHMEMORY_API_KEY;
+}
+
 function getInstance(): WithMemoryClient {
-  if (!instance) {
-    throw new Error(
-      "WithMemory SDK not configured. Call memory.configure({ apiKey: '...' }) before use."
-    );
+  if (instance) return instance;
+  const envKey = envApiKey();
+  if (envKey) {
+    instance = new WithMemoryClient({ apiKey: envKey });
+    return instance;
   }
-  return instance;
+  throw new Error(
+    "WithMemory SDK not configured. Call memory.configure({ apiKey: '...' }) " +
+      "or set the WITHMEMORY_API_KEY environment variable before use."
+  );
+}
+
+/**
+ * Build a client for a pre-auth request (cache.create, requestCode,
+ * verifyCode). Prefers an existing configured instance so a custom
+ * `baseUrl` set via `configure()` is honored, then falls back to a
+ * temporary client with an empty API key against the default base URL.
+ */
+function preAuthClient(): WithMemoryClient {
+  return instance ?? createClient({ apiKey: "" });
 }
 
 export const memory = {
+  /**
+   * Configure the singleton client. An explicit `configure()` call always
+   * wins over `process.env.WITHMEMORY_API_KEY`, so if both are present the
+   * call site is authoritative. Calling `configure()` again replaces the
+   * existing instance.
+   */
   configure(config: WithMemoryConfig): void {
     instance = new WithMemoryClient(config);
   },
@@ -159,13 +201,22 @@ export const memory = {
   cache: {
     create(options?: CacheCreateOptions, requestOptions?: RequestOptions) {
       // cache.create is unauthenticated — works without configure()
-      const client =
-        instance ?? createClient({ apiKey: "", baseUrl: "https://api.withmemory.dev" });
-      return client.cache.create(options, requestOptions);
+      return preAuthClient().cache.create(options, requestOptions);
     },
     claim(options: CacheClaimOptions, requestOptions?: RequestOptions) {
-      // claim requires an API key — must call configure() first
+      // claim requires an API key with account:admin scope
       return getInstance().cache.claim(options, requestOptions);
     },
+  },
+
+  // Pre-auth: these work before configure() is called. The returned key
+  // from verifyCode() is the one to pass to configure() (or to set as
+  // WITHMEMORY_API_KEY) for subsequent authenticated calls.
+  requestCode(params: RequestCodeParams, options?: RequestOptions) {
+    return preAuthClient().requestCode(params, options);
+  },
+
+  verifyCode(params: VerifyCodeParams, options?: RequestOptions) {
+    return preAuthClient().verifyCode(params, options);
   },
 };

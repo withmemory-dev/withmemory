@@ -20,7 +20,6 @@ import type {
   ListOptions,
   ListResponse,
   RequestOptions,
-  Container,
   CreateContainerOptions,
   CreateContainerResponse,
   CreateContainerKeyOptions,
@@ -36,6 +35,10 @@ import type {
   CacheCreateResponse,
   CacheClaimOptions,
   CacheClaimResponse,
+  RequestCodeParams,
+  RequestCodeResponse,
+  VerifyCodeParams,
+  VerifyCodeResponse,
 } from "./types";
 
 const DEFAULT_BASE_URL = "https://api.withmemory.dev";
@@ -70,6 +73,7 @@ export class WithMemoryClient {
       value: params.value,
     };
     if (params.key !== undefined) body.key = params.key;
+    if (params.importance !== undefined) body.importance = params.importance;
     return this.request<AddResponse>("POST", "/v1/memories", body, options);
   }
 
@@ -96,6 +100,7 @@ export class WithMemoryClient {
     };
     if (options.maxItems !== undefined) body.maxItems = options.maxItems;
     if (options.maxTokens !== undefined) body.maxTokens = options.maxTokens;
+    if (options.threshold !== undefined) body.threshold = options.threshold;
     if (Object.keys(mergedDefaults).length > 0) body.defaults = mergedDefaults;
     return this.request<RecallResponse>("POST", "/v1/recall", body, requestOptions);
   }
@@ -176,18 +181,21 @@ export class WithMemoryClient {
   }
 
   // ─── Containers namespace ────────────────────────────────────────────────
+  // Every method returns the full server response envelope (not unwrapped).
+  // This is intentionally consistent with the rest of the SDK — callers
+  // reach for `response.container`, `response.containers`, `response.key`,
+  // etc. and keep `request_id` access for free.
   readonly containers = {
-    create: async (
+    create: (
       options: CreateContainerOptions,
       requestOptions?: RequestOptions
-    ): Promise<Container> => {
-      const response = await this.request<CreateContainerResponse>(
+    ): Promise<CreateContainerResponse> => {
+      return this.request<CreateContainerResponse>(
         "POST",
         "/v1/containers",
         options,
         requestOptions
       );
-      return response.container;
     },
 
     createKey: (
@@ -208,27 +216,25 @@ export class WithMemoryClient {
       );
     },
 
-    list: async (requestOptions?: RequestOptions): Promise<Container[]> => {
-      const response = await this.request<ListContainersResponse>(
+    list: (requestOptions?: RequestOptions): Promise<ListContainersResponse> => {
+      return this.request<ListContainersResponse>(
         "GET",
         "/v1/containers",
         undefined,
         requestOptions
       );
-      return response.containers;
     },
 
-    get: async (
+    get: (
       options: GetContainerOptions,
       requestOptions?: RequestOptions
-    ): Promise<Container> => {
-      const response = await this.request<GetContainerResponse>(
+    ): Promise<GetContainerResponse> => {
+      return this.request<GetContainerResponse>(
         "GET",
         `/v1/containers/${options.containerId}`,
         undefined,
         requestOptions
       );
-      return response.container;
     },
 
     revokeKey: (
@@ -296,6 +302,45 @@ export class WithMemoryClient {
     },
   };
 
+  // ─── Pre-auth signup flow ─────────────────────────────────────────────
+  // requestCode + verifyCode are pre-auth: they work on a client with an
+  // empty apiKey. Route through requestWithToken(null, …) which omits the
+  // Authorization header entirely. An agent constructs a temporary client
+  // (or uses the singleton's pre-auth fallback in index.ts), calls
+  // requestCode with an email, asks its principal for the 6-digit code,
+  // then calls verifyCode and receives an API key.
+
+  async requestCode(
+    params: RequestCodeParams,
+    options?: RequestOptions
+  ): Promise<RequestCodeResponse> {
+    return this.requestWithToken<RequestCodeResponse>(
+      null,
+      "POST",
+      "/v1/auth/request-code",
+      { email: params.email },
+      options
+    );
+  }
+
+  async verifyCode(
+    params: VerifyCodeParams,
+    options?: RequestOptions
+  ): Promise<VerifyCodeResponse> {
+    const body: Record<string, unknown> = {
+      email: params.email,
+      code: params.code,
+    };
+    if (params.issuedTo !== undefined) body.issuedTo = params.issuedTo;
+    return this.requestWithToken<VerifyCodeResponse>(
+      null,
+      "POST",
+      "/v1/auth/verify-code",
+      body,
+      options
+    );
+  }
+
   private createScopedRequestFn(token: string): ScopedRequestFn {
     return <T>(
       method: string,
@@ -341,6 +386,7 @@ export class WithMemoryClient {
       const headers: Record<string, string> = {
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
         ...(this.clientId ? { "X-WithMemory-Client": this.clientId } : {}),
+        ...(options?.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
       };
       if (token !== null) {
         headers.Authorization = `Bearer ${token}`;
@@ -457,6 +503,7 @@ export class WithMemoryClient {
             ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
             Authorization: `Bearer ${this.apiKey}`,
             ...(this.clientId ? { "X-WithMemory-Client": this.clientId } : {}),
+            ...(options?.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
           },
           body: body !== undefined ? JSON.stringify(body) : undefined,
           signal: controller.signal,

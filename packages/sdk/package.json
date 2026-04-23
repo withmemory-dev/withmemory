@@ -1,8 +1,29 @@
 {
   "name": "@withmemory/sdk",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "TypeScript SDK for WithMemory — persistent memory for AI agents",
   "license": "Apache-2.0",
+  "author": "WithMemory <hello@withmemory.dev>",
+  "homepage": "https://withmemory.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/withmemory-dev/withmemory",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/withmemory-dev/withmemory/issues"
+  },
+  "keywords": [
+    "ai",
+    "memory",
+    "agents",
+    "llm",
+    "typescript",
+    "sdk",
+    "vector",
+    "embedding",
+    "recall"
+  ],
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -19,10 +40,13 @@
       }
     }
   },
-  "files": ["dist"],
+  "files": ["dist", "LICENSE"],
   "sideEffects": false,
   "engines": {
     "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsup",

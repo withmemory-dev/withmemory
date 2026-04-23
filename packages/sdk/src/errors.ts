@@ -25,7 +25,7 @@ export class WithMemoryError extends Error {
   static KeyExpiredError: typeof KeyExpiredError;
   static ContainerLimitExceededError: typeof ContainerLimitExceededError;
   static ContainerNameExistsError: typeof ContainerNameExistsError;
-  static ConfirmationRequiredError: typeof ConfirmationRequiredError;
+  static InsufficientScopeError: typeof InsufficientScopeError;
   static RateLimitedError: typeof RateLimitedError;
   static CacheEntryLimitError: typeof CacheEntryLimitError;
   static CacheExpiredError: typeof CacheExpiredError;
@@ -92,10 +92,17 @@ export class ContainerLimitExceededError extends WithMemoryError {
   }
 }
 
-export class ConfirmationRequiredError extends WithMemoryError {
+/**
+ * Thrown (via the factory) on HTTP 403 with `code: "insufficient_scope"`.
+ * `details.required` lists the scope(s) the route demanded; `details.granted`
+ * lists what the calling key actually holds. Recovery: mint a key with the
+ * missing scope(s) via `containers.createKey`, or re-run signup with a
+ * different `issuedTo` to get a full-scope key on the parent account.
+ */
+export class InsufficientScopeError extends WithMemoryError {
   constructor(message: string, options: ErrorOptions) {
-    super(message, { ...options, code: "confirmation_required" });
-    this.name = "ConfirmationRequiredError";
+    super(message, { ...options, code: "insufficient_scope" });
+    this.name = "InsufficientScopeError";
   }
 }
 
@@ -158,7 +165,7 @@ WithMemoryError.ExtractionFailedError = ExtractionFailedError;
 WithMemoryError.KeyExpiredError = KeyExpiredError;
 WithMemoryError.ContainerLimitExceededError = ContainerLimitExceededError;
 WithMemoryError.ContainerNameExistsError = ContainerNameExistsError;
-WithMemoryError.ConfirmationRequiredError = ConfirmationRequiredError;
+WithMemoryError.InsufficientScopeError = InsufficientScopeError;
 WithMemoryError.RateLimitedError = RateLimitedError;
 WithMemoryError.CacheEntryLimitError = CacheEntryLimitError;
 WithMemoryError.CacheExpiredError = CacheExpiredError;
@@ -192,8 +199,8 @@ export function createError(
       return new ContainerLimitExceededError(message, opts);
     case "container_name_exists":
       return new ContainerNameExistsError(message, opts);
-    case "confirmation_required":
-      return new ConfirmationRequiredError(message, opts);
+    case "insufficient_scope":
+      return new InsufficientScopeError(message, opts);
     case "extraction_failed":
       return new ExtractionFailedError(message, opts);
     case "rate_limited":

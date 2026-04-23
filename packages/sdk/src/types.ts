@@ -16,6 +16,12 @@ export interface RequestOptions {
   maxRetries?: number;
   /** Abort signal to cancel the request. */
   signal?: AbortSignal;
+  /**
+   * Idempotency key for this request. When set, the SDK sends it as the
+   * `Idempotency-Key` HTTP header. Primarily useful on `add()` so that a
+   * retry after a network error doesn't double-create memories.
+   */
+  idempotencyKey?: string;
 }
 
 export interface Memory {
@@ -34,6 +40,8 @@ export interface AddParams {
   scope: string;
   key?: string;
   value: string;
+  /** Importance score (0-1). Only valid on explicit writes (when `key` is provided). Default 0.5. */
+  importance?: number;
 }
 
 export interface AddResponse {
@@ -132,6 +140,14 @@ export interface RecallOptions {
   maxItems?: number;
   maxTokens?: number;
   defaults?: Record<string, string>;
+  /**
+   * Similarity threshold preset. Maps on the server to the cosine
+   * `similarityFloor`:
+   *   - `"strict"`     → 0.4 (fewer, tighter matches)
+   *   - `"balanced"`   → 0.2 (default when omitted)
+   *   - `"permissive"` → 0.1 (more, looser matches)
+   */
+  threshold?: "strict" | "balanced" | "permissive";
 }
 
 export interface RegisterDefaults {
@@ -304,6 +320,53 @@ export interface CacheClaimResponse {
     claimed: boolean;
     containerId: string;
     memoriesCreated: number;
+    /**
+     * Scope string the claiming agent passes to `recall({ scope })` to read
+     * the memories that were moved from the cache into the new container.
+     * Server-side value is `cache-${cacheId}` — the same string used as the
+     * end user's `externalId` inside the claimed container.
+     */
+    scope: string;
+    /**
+     * Raw API key, shown once. Scoped `memory:read` against the claimed
+     * container and nothing else. The key is not retrievable after this
+     * response — if the agent loses it, the only recovery path is
+     * `containers.createKey()` from the parent account's Pro+ plan.
+     */
+    containerKey: string;
+  };
+  request_id?: string;
+}
+
+// ─── Auth (request-code / verify-code) ───────────────────────────────────
+
+export interface RequestCodeParams {
+  email: string;
+}
+
+export interface RequestCodeResponse {
+  result: {
+    sent: boolean;
+  };
+  request_id?: string;
+}
+
+export interface VerifyCodeParams {
+  email: string;
+  code: string;
+  /**
+   * Optional human-readable label for the key that gets minted. Stored on
+   * the API key row and surfaced via `whoami().key.name`. Default when
+   * omitted: `"Agent-created key"`.
+   */
+  issuedTo?: string;
+}
+
+export interface VerifyCodeResponse {
+  result: {
+    apiKey: string;
+    accountId: string;
+    isNewAccount: boolean;
   };
   request_id?: string;
 }

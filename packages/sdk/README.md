@@ -169,7 +169,7 @@ const client = createClient({
 ## Documentation
 
 - [SKILL.md](https://withmemory.dev/SKILL.md) — agent-readable integration guide
-- [API Reference](./API.md) — full endpoint and type documentation
+- [API Reference](https://github.com/withmemory-dev/withmemory/blob/main/packages/sdk/API.md) — full endpoint and type documentation
 - [Dashboard](https://app.withmemory.dev) — manage keys, view memories, configure extraction
 
 ## License
