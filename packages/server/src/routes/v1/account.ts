@@ -9,6 +9,7 @@ import { requirePlan, PlanEnforcementError } from "../../lib/plan-enforcement";
 import { requireScopes } from "../../lib/scopes";
 import { createStripeClient } from "../../lib/stripe";
 import { PLAN_LIMITS, tierToPriceId } from "../../lib/plan-tiers";
+import { meteringSnapshot } from "../../lib/api-call-metering";
 
 const { wmAccounts, wmMemories } = schema;
 
@@ -89,6 +90,7 @@ export function accountRoute() {
       .where(eq(wmAccounts.parentAccountId, account.id));
 
     const containerLimit = CONTAINER_LIMITS[account.planTier] ?? 0;
+    const apiCallSnapshot = meteringSnapshot(account);
 
     return c.json({
       usage: {
@@ -96,6 +98,9 @@ export function accountRoute() {
         memoryLimit: account.memoryLimit,
         containerCount: containerCountRow?.count ?? 0,
         containerLimit,
+        apiCallsThisPeriod: apiCallSnapshot.current,
+        monthlyApiCallLimit: apiCallSnapshot.limit,
+        apiCallsResetAt: apiCallSnapshot.resetsAt.toISOString(),
       },
       request_id: c.get("requestId"),
     });
@@ -335,6 +340,7 @@ export function accountRoute() {
 
     const containerLimit =
       PLAN_LIMITS[account.planTier]?.containerLimit ?? CONTAINER_LIMITS[account.planTier] ?? 0;
+    const apiCallSnapshot = meteringSnapshot(account);
 
     return c.json({
       billing: {
@@ -346,6 +352,9 @@ export function accountRoute() {
           memoryLimit: account.memoryLimit,
           containerCount: containerCountRow?.count ?? 0,
           containerLimit,
+          apiCallsThisPeriod: apiCallSnapshot.current,
+          monthlyApiCallLimit: apiCallSnapshot.limit,
+          apiCallsResetAt: apiCallSnapshot.resetsAt.toISOString(),
         },
         // URLs are agent affordances. The agent can hit POST checkout/portal
         // itself when it wants a URL — we don't pre-mint here because each

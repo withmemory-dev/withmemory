@@ -1483,6 +1483,60 @@ tests.push({
   },
 });
 
+// ── API call metering tests ─────────────────────────────────────────────────
+
+tests.push({
+  name: "/v1/account/usage exposes apiCallsThisPeriod and monthlyApiCallLimit",
+  fn: async () => {
+    const response = await fetch(`${BASE_URL}/v1/account/usage`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${API_KEY}` },
+    });
+    assert(response.status === 200, `expected 200, got ${response.status}`);
+    const body = (await response.json()) as any;
+    assert(
+      typeof body.usage?.apiCallsThisPeriod === "number",
+      `expected number apiCallsThisPeriod, got ${typeof body.usage?.apiCallsThisPeriod}`
+    );
+    assert(
+      typeof body.usage?.monthlyApiCallLimit === "number",
+      `expected number monthlyApiCallLimit, got ${typeof body.usage?.monthlyApiCallLimit}`
+    );
+    assert(
+      typeof body.usage?.apiCallsResetAt === "string",
+      `expected string apiCallsResetAt, got ${typeof body.usage?.apiCallsResetAt}`
+    );
+    assert(
+      body.usage.apiCallsThisPeriod >= 0,
+      `expected non-negative apiCallsThisPeriod, got ${body.usage.apiCallsThisPeriod}`
+    );
+  },
+});
+
+tests.push({
+  name: "/v1/account/billing exposes apiCallsThisPeriod and monthlyApiCallLimit",
+  fn: async () => {
+    const response = await fetch(`${BASE_URL}/v1/account/billing`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${API_KEY}` },
+    });
+    assert(response.status === 200, `expected 200, got ${response.status}`);
+    const body = (await response.json()) as any;
+    assert(
+      typeof body.billing?.usage?.apiCallsThisPeriod === "number",
+      `expected number apiCallsThisPeriod, got ${typeof body.billing?.usage?.apiCallsThisPeriod}`
+    );
+    assert(
+      typeof body.billing?.usage?.monthlyApiCallLimit === "number",
+      `expected number monthlyApiCallLimit, got ${typeof body.billing?.usage?.monthlyApiCallLimit}`
+    );
+    assert(
+      typeof body.billing?.usage?.apiCallsResetAt === "string",
+      `expected string apiCallsResetAt, got ${typeof body.billing?.usage?.apiCallsResetAt}`
+    );
+  },
+});
+
 async function main() {
   const totalStart = performance.now();
   let passed = 0;

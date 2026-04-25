@@ -58,8 +58,14 @@ export const wmAccounts = pgTable(
     stripeSubscriptionId: text("stripe_subscription_id"),
     currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
     memoryLimit: integer("memory_limit").notNull().default(1000),
-    // Reserved for future API call rate limiting. Not currently enforced.
     monthlyApiCallLimit: integer("monthly_api_call_limit").notNull().default(10000),
+    // Per-period counter incremented fire-and-forget on every authenticated
+    // request. Resets to 1 once `current_period_start` is older than 30 days
+    // (the increment helper does the reset, route handlers only read).
+    apiCallsThisPeriod: integer("api_calls_this_period").notNull().default(0),
+    currentPeriodStart: timestamp("current_period_start", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     // Human-readable display name. Required for sub-accounts, optional for
     // top-level accounts (which use email as their primary identifier).
     name: text("name"),
