@@ -122,8 +122,10 @@ export function containersRoute() {
                 },
                 {
                   action: "upgrade_plan",
-                  url: "https://app.withmemory.dev/settings/billing",
-                  description: "Upgrade your plan for a higher container limit",
+                  url: "https://app.withmemory.dev/settings",
+                  api: "POST /v1/account/checkout",
+                  description:
+                    "Upgrade your plan for a higher container limit. Agents can call POST /v1/account/checkout to mint a Checkout URL and surface it to the principal.",
                 },
               ],
             },

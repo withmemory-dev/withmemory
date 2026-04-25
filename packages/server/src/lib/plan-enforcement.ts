@@ -161,8 +161,10 @@ export class PlanEnforcementError extends Error {
           },
           {
             action: "upgrade_plan",
-            url: "https://app.withmemory.dev/settings/billing",
-            description: "Upgrade your plan for a higher memory limit",
+            url: "https://app.withmemory.dev/settings",
+            api: "POST /v1/account/checkout",
+            description:
+              "Upgrade your plan for a higher memory limit. Agents can call POST /v1/account/checkout to mint a Checkout URL and surface it to the principal.",
           },
         ],
       }
@@ -182,8 +184,10 @@ export class PlanEnforcementError extends Error {
         recovery_options: [
           {
             action: "upgrade_plan",
-            url: "https://app.withmemory.dev/settings/billing",
-            description: "Upgrade to a plan that includes this feature",
+            url: "https://app.withmemory.dev/settings",
+            api: "POST /v1/account/checkout",
+            description:
+              "Upgrade to a plan that includes this feature. Agents can call POST /v1/account/checkout to mint a Checkout URL and surface it to the principal.",
           },
         ],
       }

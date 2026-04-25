@@ -6,6 +6,7 @@ import { authMiddleware } from "./middleware/auth";
 import { v1Routes } from "./routes/v1";
 import { cacheRoute } from "./routes/v1/cache";
 import { authRoute } from "./routes/v1/auth";
+import { webhookRoute } from "./routes/webhooks";
 
 const app = new Hono<{ Bindings: WorkerEnv; Variables: AppVariables }>();
 
@@ -38,6 +39,10 @@ app.route("/v1", cacheRoute());
 app.route("/v1", authRoute());
 
 app.route("/v1", v1Routes());
+
+// Stripe webhook receiver. Mounted outside /v1/* so it bypasses the API-key
+// auth middleware — Stripe authenticates via webhook signature instead.
+app.route("/", webhookRoute());
 
 app.get("/", (c) => {
   return c.json({
